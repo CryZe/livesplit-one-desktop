@@ -1,4 +1,4 @@
-// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 #[macro_use]
 extern crate glsl_to_spirv_macros_impl;
@@ -7,8 +7,8 @@ mod config;
 
 use {
     crate::config::Config,
-    gfx_backend_vulkan as back,
-    // gfx_backend_dx12 as back,
+    // gfx_backend_vulkan as back,
+    gfx_backend_dx12 as back,
     // gfx_backend_gl as back,
     gfx_hal::{
         buffer::{self, IndexBufferView},
