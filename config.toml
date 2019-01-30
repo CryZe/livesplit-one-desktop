@@ -1,0 +1,9 @@
+[general]
+# splits = 'C:\Users\Christopher Serr\Documents\Splits\8dj.lss'
+# splits = 'C:\Users\Christopher Serr\Documents\Splits\The Legend of Zelda Breath of the Wild - Any% (Normal Mode, DLC, No Amiibo).lss'
+
+# layout = 'C:\Users\Christopher Serr\Documents\Splits\cool_columns.ls1l'
+# layout = 'C:\Users\Christopher Serr\Documents\Splits\WSplit.lsl'
+
+timing-method = 'GameTime'
+auto-splitter = 'C:\Users\Christopher Serr\Downloads\celeste.wasm'

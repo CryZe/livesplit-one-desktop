@@ -1,9 +1,12 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 #[macro_use]
 extern crate glsl_to_spirv_macros_impl;
 
+mod config;
+
 use {
+    crate::config::Config,
     gfx_backend_vulkan as back,
     // gfx_backend_dx12 as back,
     // gfx_backend_gl as back,
@@ -30,10 +33,10 @@ use {
         layout::{self, Layout, LayoutSettings},
         rendering::{Backend, IndexPair, Mesh, Renderer, Rgba, Transform},
         run::parser::composite,
-        Run, Segment, Timer, TimingMethod,
+        Timer, TimingMethod,
     },
     std::{
-        fs::{self, File},
+        fs::File,
         io::{prelude::*, BufReader, SeekFrom},
         mem,
     },
@@ -714,25 +717,20 @@ fn main() {
         depth: 0.0..1.0,
     };
 
-    let mut run = Run::new();
-    run.set_game_name("Game");
-    run.set_category_name("Category");
-    run.push_segment(Segment::new("Time"));
+    let mut config = Config::parse("config.toml").unwrap_or_default();
 
-    run.fix_splits();
+    let run = config.parse_run_or_default();
     let timer = Timer::new(run).unwrap().into_shared();
-    timer
-        .write()
-        .set_current_timing_method(TimingMethod::GameTime);
-
-    let auto_splitter = auto_splitting::Runtime::new(timer.clone());
-    if let Ok(script) = fs::read(
-        r"C:\Projekte\auto-splitter-language\target\wasm32-unknown-unknown\release\ahit.wasm",
-    ) {
-        auto_splitter.load_script(script).ok();
+    if config.is_game_time() {
+        timer
+            .write()
+            .set_current_timing_method(TimingMethod::GameTime);
     }
 
-    let mut layout = Layout::default_layout();
+    let auto_splitter = auto_splitting::Runtime::new(timer.clone());
+    config.maybe_load_auto_splitter(&auto_splitter);
+
+    let mut layout = config.parse_layout_or_default();
 
     let mut renderer = Renderer::new();
 
@@ -784,6 +782,7 @@ fn main() {
                         VirtualKeyCode::Numpad5 => timer.write().toggle_pause(),
                         VirtualKeyCode::Numpad6 => timer.write().switch_to_next_comparison(),
                         VirtualKeyCode::Numpad8 => timer.write().undo_split(),
+                        VirtualKeyCode::Return => config.save_splits(&timer.read()),
                         _ => {}
                     },
                     WindowEvent::MouseWheel { delta, .. } => {
@@ -819,9 +818,13 @@ fn main() {
                     // }
                     WindowEvent::DroppedFile(path) => {
                         let mut file = BufReader::new(File::open(&path).unwrap());
-                        if composite::parse(&mut file, Some(path), true)
+                        if composite::parse(&mut file, Some(path.clone()), true)
                             .map_err(drop)
-                            .and_then(|run| timer.write().set_run(run.run).map_err(drop))
+                            .and_then(|run| {
+                                timer.write().set_run(run.run).map_err(drop)?;
+                                config.set_splits_path(path);
+                                Ok(())
+                            })
                             .is_err()
                         {
                             let _ = file.seek(SeekFrom::Start(0));
