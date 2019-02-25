@@ -9,19 +9,25 @@ default = []
 gl = ["gfx-backend-gl"]
 
 [dependencies]
+fern = "0.5.7"
 gfx-hal = "0.1.0"
 winit = { version = "0.18.0", features = ["icon_loading"] }
-gfx-backend-dx12 = "0.1.0"
+gfx-backend-dx12 = "=0.1.0"
 gfx-backend-vulkan = "0.1.0"
 gfx-backend-gl = { version = "0.1.0", optional = true }
-env_logger = "0.6.0"
-log = "0.4.6"
-livesplit-core = { git = "https://github.com/CryZe/livesplit-core", rev = "ebb3af02ab1638f42a01c19736353dba9b69c66d" }
-# livesplit-core = { path = "livesplit-core" }
+log = { version = "0.4.6", features = ["serde"] }
+# livesplit-core = { git = "https://github.com/CryZe/livesplit-core", branch = "subsplits", features = ["rendering"] }
+livesplit-core = { git = "https://github.com/CryZe/livesplit-core", branch = "auto-splitting-on-subsplits", features = ["rendering", "auto-splitting"] }
+# livesplit-core = { path = "livesplit-core", features = ["rendering", "auto-splitting"] }
 glsl-to-spirv-macros = "0.1.1"
 glsl-to-spirv-macros-impl = "0.1.0"
-toml = "0.4.10"
+serde_yaml = "0.8.8"
 serde = { version = "1.0.85", features = ["derive"] }
+chrono = { version = "0.4.0", features = ["serde", "clock"], default-features = false }
+backtrace = "0.3.13"
+# discord-rpc-client = "0.3.0"
+twitch-stream-markers = { path = "twitch-stream-markers" }
+tokio = "0.1.15"
 
 [profile.dev]
 opt-level = 1
@@ -39,3 +45,5 @@ gfx-backend-gl = { git = "https://github.com/CryZe/gfx", branch = "vulkan-msaa" 
 # wasmer-runtime = { path = "wasmer/lib/runtime" }
 # wasmer-runtime-core = { path = "wasmer/lib/runtime-core" }
 # wasmer-clif-backend = { path = "wasmer/lib/clif-backend" }
+# winit = { path = "winit" }
+winit = { git = "https://github.com/CryZe/winit", branch = "no-raw-input" }

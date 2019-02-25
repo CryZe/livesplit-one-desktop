@@ -4,6 +4,7 @@
 extern crate glsl_to_spirv_macros_impl;
 
 mod config;
+mod stream_markers;
 
 use {
     crate::config::Config,
@@ -22,7 +23,7 @@ use {
         memory::{self, Properties},
         pass::{self, Subpass},
         pool,
-        pso::{self, PipelineStage, ShaderStageFlags},
+        pso::{self, PipelineStage, ShaderStageFlags, VertexInputRate},
         queue::{self, CommandQueue, QueueGroup, Submission},
         window::{Extent2D, PresentMode, Surface},
         Backbuffer, CommandPool, DescriptorPool, FrameSync, IndexType, Instance, Limits,
@@ -31,9 +32,9 @@ use {
     livesplit_core::{
         auto_splitting,
         layout::{self, Layout, LayoutSettings},
-        rendering::{Backend, IndexPair, Mesh, Renderer, Rgba, Transform},
+        rendering::{Backend, Mesh, Renderer, Rgba, Transform},
         run::parser::composite,
-        Timer, TimingMethod,
+        HotkeySystem, Timer,
     },
     std::{
         fs::File,
@@ -41,8 +42,7 @@ use {
         mem,
     },
     winit::{
-        dpi, ElementState, EventsLoop, Icon, KeyboardInput, MouseScrollDelta, VirtualKeyCode,
-        WindowBuilder, WindowEvent,
+        dpi, ElementState, EventsLoop, KeyboardInput, MouseScrollDelta, VirtualKeyCode, WindowEvent,
     },
 };
 
@@ -85,10 +85,10 @@ where
     pipeline_layout_textured: B::PipelineLayout,
     pipeline_colored: B::GraphicsPipeline,
     pipeline_layout_colored: B::PipelineLayout,
-
-    meshes: Vec<(B::Buffer, B::Buffer, usize, B::Memory, B::Memory)>,
-    images: Vec<(B::DescriptorSet, B::ImageView, B::Image, B::Memory)>,
 }
+
+type GfxMesh<B: gfx_hal::Backend> = Option<(B::Buffer, B::Buffer, usize, B::Memory, B::Memory)>;
+type GfxTexture<B: gfx_hal::Backend> = (B::DescriptorSet, B::ImageView, B::Image, B::Memory);
 
 struct GfxBackend<'frame, 'data, 'other, 'window, B>
 where
@@ -103,9 +103,13 @@ impl<'frame, 'data, 'other, 'window, B> Backend for GfxBackend<'frame, 'data, 'o
 where
     B: gfx_hal::Backend,
 {
-    fn create_mesh(&mut self, Mesh { vertices, indices }: &Mesh) -> IndexPair {
+    type Mesh = GfxMesh<B>;
+    type Texture = GfxTexture<B>;
+
+    fn create_mesh(&mut self, mesh: &Mesh) -> Self::Mesh {
+        let (vertices, indices) = (mesh.vertices(), mesh.indices());
         if indices.is_empty() {
-            return [0, 1, 0];
+            return None;
         }
 
         let indices_len = indices.len();
@@ -122,131 +126,122 @@ where
             indices,
             buffer::Usage::INDEX,
         );
-        let id = self.data.meshes.len();
-        self.data
-            .meshes
-            .push((vertices, indices, indices_len, vertices_mem, indices_mem));
-        [id, 0, 0]
+        Some((vertices, indices, indices_len, vertices_mem, indices_mem))
     }
 
     fn render_mesh(
         &mut self,
-        [idx, skip, _]: IndexPair,
+        mesh: &Self::Mesh,
         transform: Transform,
         [tl, tr, br, bl]: [Rgba; 4],
-        texture: Option<IndexPair>,
+        texture: Option<&Self::Texture>,
     ) {
-        if skip != 0 {
-            return;
-        }
+        if let Some((vertices, indices, indices_len, _, _)) = mesh {
+            let [x1, y1, z1, x2, y2, z2] = transform.to_column_major_array();
 
-        let (vertices, indices, indices_len, _, _) = &self.data.meshes[idx];
-        let [x1, y1, z1, x2, y2, z2] = transform.to_column_major_array();
-
-        unsafe {
-            if let Some([tex_idx, _, _]) = texture {
-                let (desc_set, _, _, _) = &self.data.images[tex_idx];
-
-                self.encoder
-                    .bind_graphics_pipeline(&self.data.pipeline_textured);
-                self.encoder.bind_vertex_buffers(0, Some((vertices, 0)));
-                self.encoder.bind_index_buffer(IndexBufferView {
-                    buffer: indices,
-                    offset: 0,
-                    index_type: IndexType::U16,
-                });
-                self.encoder.bind_graphics_descriptor_sets(
-                    &self.data.pipeline_layout_textured,
-                    0,
-                    Some(desc_set),
-                    &[],
-                );
-                self.encoder.push_graphics_constants(
-                    &self.data.pipeline_layout_textured,
-                    ShaderStageFlags::VERTEX,
-                    0,
-                    &[
-                        x1.to_bits(),
-                        y1.to_bits(),
-                        z1.to_bits(),
-                        0.0f32.to_bits(),
-                        x2.to_bits(),
-                        y2.to_bits(),
-                        z2.to_bits(),
-                        0.0f32.to_bits(),
-                        tl[0].to_bits(),
-                        tl[1].to_bits(),
-                        tl[2].to_bits(),
-                        tl[3].to_bits(),
-                        tr[0].to_bits(),
-                        tr[1].to_bits(),
-                        tr[2].to_bits(),
-                        tr[3].to_bits(),
-                        bl[0].to_bits(),
-                        bl[1].to_bits(),
-                        bl[2].to_bits(),
-                        bl[3].to_bits(),
-                        br[0].to_bits(),
-                        br[1].to_bits(),
-                        br[2].to_bits(),
-                        br[3].to_bits(),
-                    ],
-                );
-                self.encoder.draw_indexed(0..*indices_len as u32, 0, 0..1);
-            } else {
-                self.encoder
-                    .bind_graphics_pipeline(&self.data.pipeline_colored);
-                self.encoder.bind_vertex_buffers(0, Some((vertices, 0)));
-                self.encoder.bind_index_buffer(IndexBufferView {
-                    buffer: indices,
-                    offset: 0,
-                    index_type: IndexType::U16,
-                });
-                self.encoder.push_graphics_constants(
-                    &self.data.pipeline_layout_colored,
-                    ShaderStageFlags::VERTEX,
-                    0,
-                    &[
-                        x1.to_bits(),
-                        y1.to_bits(),
-                        z1.to_bits(),
-                        0.0f32.to_bits(),
-                        x2.to_bits(),
-                        y2.to_bits(),
-                        z2.to_bits(),
-                        0.0f32.to_bits(),
-                        tl[0].to_bits(),
-                        tl[1].to_bits(),
-                        tl[2].to_bits(),
-                        tl[3].to_bits(),
-                        tr[0].to_bits(),
-                        tr[1].to_bits(),
-                        tr[2].to_bits(),
-                        tr[3].to_bits(),
-                        bl[0].to_bits(),
-                        bl[1].to_bits(),
-                        bl[2].to_bits(),
-                        bl[3].to_bits(),
-                        br[0].to_bits(),
-                        br[1].to_bits(),
-                        br[2].to_bits(),
-                        br[3].to_bits(),
-                    ],
-                );
-                self.encoder.draw_indexed(0..*indices_len as u32, 0, 0..1);
+            unsafe {
+                if let Some((desc_set, _, _, _)) = texture {
+                    self.encoder
+                        .bind_graphics_pipeline(&self.data.pipeline_textured);
+                    self.encoder.bind_vertex_buffers(0, Some((vertices, 0)));
+                    self.encoder.bind_index_buffer(IndexBufferView {
+                        buffer: indices,
+                        offset: 0,
+                        index_type: IndexType::U16,
+                    });
+                    self.encoder.bind_graphics_descriptor_sets(
+                        &self.data.pipeline_layout_textured,
+                        0,
+                        Some(desc_set),
+                        &[],
+                    );
+                    self.encoder.push_graphics_constants(
+                        &self.data.pipeline_layout_textured,
+                        ShaderStageFlags::VERTEX,
+                        0,
+                        &[
+                            x1.to_bits(),
+                            y1.to_bits(),
+                            z1.to_bits(),
+                            0.0f32.to_bits(),
+                            x2.to_bits(),
+                            y2.to_bits(),
+                            z2.to_bits(),
+                            0.0f32.to_bits(),
+                            tl[0].to_bits(),
+                            tl[1].to_bits(),
+                            tl[2].to_bits(),
+                            tl[3].to_bits(),
+                            tr[0].to_bits(),
+                            tr[1].to_bits(),
+                            tr[2].to_bits(),
+                            tr[3].to_bits(),
+                            bl[0].to_bits(),
+                            bl[1].to_bits(),
+                            bl[2].to_bits(),
+                            bl[3].to_bits(),
+                            br[0].to_bits(),
+                            br[1].to_bits(),
+                            br[2].to_bits(),
+                            br[3].to_bits(),
+                        ],
+                    );
+                    self.encoder.draw_indexed(0..*indices_len as u32, 0, 0..1);
+                } else {
+                    self.encoder
+                        .bind_graphics_pipeline(&self.data.pipeline_colored);
+                    self.encoder.bind_vertex_buffers(0, Some((vertices, 0)));
+                    self.encoder.bind_index_buffer(IndexBufferView {
+                        buffer: indices,
+                        offset: 0,
+                        index_type: IndexType::U16,
+                    });
+                    self.encoder.push_graphics_constants(
+                        &self.data.pipeline_layout_colored,
+                        ShaderStageFlags::VERTEX,
+                        0,
+                        &[
+                            x1.to_bits(),
+                            y1.to_bits(),
+                            z1.to_bits(),
+                            0.0f32.to_bits(),
+                            x2.to_bits(),
+                            y2.to_bits(),
+                            z2.to_bits(),
+                            0.0f32.to_bits(),
+                            tl[0].to_bits(),
+                            tl[1].to_bits(),
+                            tl[2].to_bits(),
+                            tl[3].to_bits(),
+                            tr[0].to_bits(),
+                            tr[1].to_bits(),
+                            tr[2].to_bits(),
+                            tr[3].to_bits(),
+                            bl[0].to_bits(),
+                            bl[1].to_bits(),
+                            bl[2].to_bits(),
+                            bl[3].to_bits(),
+                            br[0].to_bits(),
+                            br[1].to_bits(),
+                            br[2].to_bits(),
+                            br[3].to_bits(),
+                        ],
+                    );
+                    self.encoder.draw_indexed(0..*indices_len as u32, 0, 0..1);
+                }
             }
         }
     }
 
-    fn free_mesh(&mut self, [idx, _, _]: IndexPair) {
+    fn free_mesh(&mut self, _mesh: Self::Mesh) {
         // backend.device.destroy_buffer(vertex_buffer);
         // backend.device.destroy_buffer(index_buffer);
         // backend.device.free_memory(vertex_memory);
         // backend.device.free_memory(index_memory);
     }
 
-    fn create_texture(&mut self, width: u32, height: u32, data: &[u8]) -> IndexPair {
-        let image = upload_image(
+    fn create_texture(&mut self, width: u32, height: u32, data: &[u8]) -> Self::Texture {
+        upload_image(
             &self.data.device,
             &mut self.data.image_command_pool,
             &mut self.data.queue_group.queues[0],
@@ -259,13 +254,10 @@ where
             data,
             width,
             height,
-        );
-        let id = self.data.images.len();
-        self.data.images.push(image);
-        [id, 0, 0]
+        )
     }
 
-    fn free_texture(&mut self, [texture, _, _]: IndexPair) {
+    fn free_texture(&mut self, _texture: Self::Texture) {
         // backend.device.destroy_image(image_logo);
         // backend.device.destroy_image_view(image_srv);
         // backend.device.free_memory(image_memory);
@@ -285,21 +277,55 @@ where
 }
 
 fn main() {
-    env_logger::init();
+    let mut config = Config::parse("config.yaml").unwrap_or_default();
+    config.setup_logging();
 
+    log::trace!("Parsing run...");
+    let run = config.parse_run_or_default();
+    log::trace!("Creating timer...");
+    let timer = Timer::new(run).unwrap().into_shared();
+    log::trace!("Configuring timer...");
+    config.configure_timer(&mut timer.write());
+
+    log::trace!("Configuring stream markers client...");
+    let mut markers = config.build_marker_client();
+
+    log::trace!("Setting up auto splitter runtime...");
+    let auto_splitter = auto_splitting::Runtime::new(timer.clone());
+    log::trace!("Loading auto splitter...");
+    config.maybe_load_auto_splitter(&auto_splitter);
+
+    log::trace!("Setting up hotkeys...");
+    let mut hotkey_system = HotkeySystem::new(timer.clone()).unwrap();
+    log::trace!("Configuring hotkeys from config...");
+    config.configure_hotkeys(&mut hotkey_system);
+
+    // let mut discord = discord_rpc_client::Client::new(293107006284496897);
+    // discord.start();
+
+    // discord
+    //     .set_activity(|act| {
+    //         act.details(timer.read().run().extended_name(false))
+    //             .assets(|assets| assets.large_image("default").large_text("LiveSplit"))
+    //     })
+    //     .ok();
+
+    log::trace!("Loading layout...");
+    let mut layout = config.parse_layout_or_default();
+
+    log::trace!("Setting up window event loop...");
     let mut events_loop = EventsLoop::new();
-    let window_builder = WindowBuilder::new()
-        .with_dimensions((300, 500).into())
-        .with_title("LiveSplit One")
-        .with_window_icon(Some(Icon::from_bytes(include_bytes!("icon.png")).unwrap()))
-        .with_resizable(true)
-        .with_transparency(true);
+    log::trace!("Building window...");
+    let window_builder = config.build_window();
 
     #[cfg(not(feature = "gl"))]
     let (window, mut adapters, mut surface) = {
         let window = window_builder.build(&events_loop).unwrap();
+        log::trace!("Creating backend...");
         let instance = back::Instance::create("Foo", 1);
+        log::trace!("Creating surface...");
         let surface = instance.create_surface(&window);
+        log::trace!("Enumerating adapters...");
         let adapters = instance.enumerate_adapters();
         (window, adapters, surface)
     };
@@ -323,6 +349,8 @@ fn main() {
         (adapters, surface)
     };
 
+    log::trace!("Choosing adapter...");
+
     let mut adapter = adapters.swap_remove(0);
     let memory_types = adapter.physical_device.memory_properties().memory_types;
     let limits = adapter.physical_device.limits();
@@ -330,6 +358,8 @@ fn main() {
     let (device, queue_group) = adapter
         .open_with::<_, gfx_hal::Graphics>(1, |family| surface.supports_queue_family(family))
         .unwrap();
+
+    log::trace!("Creating command pools...");
 
     let command_pool = unsafe {
         device
@@ -341,6 +371,8 @@ fn main() {
             .create_command_pool_typed(&queue_group, pool::CommandPoolCreateFlags::empty())
             .unwrap()
     };
+
+    log::trace!("Creating descriptor set layouts...");
 
     let set_layout = unsafe {
         device
@@ -369,6 +401,8 @@ fn main() {
     // TODO: We may need more
     const DESCRIPTOR_POOL_SET_COUNT: usize = 256;
 
+    log::trace!("Creating descriptor set pool...");
+
     let desc_pool = unsafe {
         device
             .create_descriptor_pool(
@@ -387,18 +421,23 @@ fn main() {
             .unwrap()
     };
 
+    log::trace!("Creating semaphores and fences...");
+
     let mut frame_semaphore = device.create_semaphore().expect("Can't create semaphore");
     let frame_fence = device.create_fence(false).expect("Can't create fence");
     let image_fence = device.create_fence(false).expect("Can't create fence");
+
+    log::trace!("Creating image sampler...");
 
     // Image
     let sampler =
         unsafe { device.create_sampler(SamplerInfo::new(Filter::Linear, WrapMode::Clamp)) }
             .expect("Can't create sampler");
 
+    log::trace!("Setting up swapchain...");
+
     // Swapchain setup
-    let (caps, formats, _present_modes, mut composite_alphas) =
-        surface.compatibility(&mut adapter.physical_device);
+    let (caps, formats, _present_modes) = surface.compatibility(&mut adapter.physical_device);
     let format = formats.map_or(format::Format::Rgba8Unorm, |formats| {
         formats
             .iter()
@@ -409,13 +448,18 @@ fn main() {
     // TODO: Use present_modes and composite_alphas
 
     let mut swap_config = SwapchainConfig::from_caps(&caps, format, DIMS);
-    swap_config.composite_alpha = composite_alphas.swap_remove(0);
+    let dpi = window.get_hidpi_factor();
+    swap_config.extent.width = (swap_config.extent.width as f64 * dpi) as _;
+    swap_config.extent.height = (swap_config.extent.height as f64 * dpi) as _;
+    // swap_config.composite_alpha = composite_alphas.swap_remove(0);
     swap_config.present_mode = PresentMode::Fifo;
     let extent = swap_config.extent.to_extent();
 
     let (mut swap_chain, mut backbuffer) =
         unsafe { device.create_swapchain(&mut surface, swap_config, None) }
             .expect("Can't create swapchain");
+
+    log::trace!("Creating render pass...");
 
     #[cfg(feature = "gl")]
     let samples = 1;
@@ -470,6 +514,8 @@ fn main() {
         .expect("Can't create render pass")
     };
 
+    log::trace!("Creating intermediary multisample images...");
+
     let (mut intermediary, mut intermediary_memory) = create_image(
         &device,
         &memory_types,
@@ -493,6 +539,8 @@ fn main() {
             )
             .unwrap()
     };
+
+    log::trace!("Creating framebuffers...");
 
     let (mut frame_images, mut framebuffers) = match backbuffer {
         Backbuffer::Images(images) => {
@@ -523,6 +571,8 @@ fn main() {
         }
         Backbuffer::Framebuffer(fbo) => (Vec::new(), vec![fbo]),
     };
+
+    log::trace!("Setting up pipelines...");
 
     // Pipeline setup
     let pipeline_layout_textured = unsafe {
@@ -621,7 +671,7 @@ fn main() {
                 .push(pso::VertexBufferDesc {
                     binding: 0,
                     stride: mem::size_of::<Vertex>() as u32,
-                    rate: 0,
+                    rate: VertexInputRate::Vertex,
                 });
 
             pipeline_desc_textured.attributes.push(pso::AttributeDesc {
@@ -661,7 +711,7 @@ fn main() {
                 .push(pso::VertexBufferDesc {
                     binding: 0,
                     stride: mem::size_of::<Vertex>() as u32,
-                    rate: 0,
+                    rate: VertexInputRate::Vertex,
                 });
 
             pipeline_desc_colored.attributes.push(pso::AttributeDesc {
@@ -706,6 +756,8 @@ fn main() {
         (pipeline_textured.unwrap(), pipeline_colored.unwrap())
     };
 
+    log::trace!("Setting up renderer...");
+
     // Rendering setup
     let mut viewport = pso::Viewport {
         rect: pso::Rect {
@@ -716,21 +768,6 @@ fn main() {
         },
         depth: 0.0..1.0,
     };
-
-    let mut config = Config::parse("config.toml").unwrap_or_default();
-
-    let run = config.parse_run_or_default();
-    let timer = Timer::new(run).unwrap().into_shared();
-    if config.is_game_time() {
-        timer
-            .write()
-            .set_current_timing_method(TimingMethod::GameTime);
-    }
-
-    let auto_splitter = auto_splitting::Runtime::new(timer.clone());
-    config.maybe_load_auto_splitter(&auto_splitter);
-
-    let mut layout = config.parse_layout_or_default();
 
     let mut renderer = Renderer::new();
 
@@ -750,9 +787,6 @@ fn main() {
         pipeline_layout_textured,
         pipeline_colored,
         pipeline_layout_colored,
-
-        meshes: vec![],
-        images: vec![],
     };
 
     let mut running = true;
@@ -762,6 +796,7 @@ fn main() {
         height: extent.height as _,
     };
     while running {
+        log::trace!("Polling events...");
         events_loop.poll_events(|event| {
             if let winit::Event::WindowEvent { event, .. } = event {
                 match event {
@@ -770,21 +805,11 @@ fn main() {
                         input:
                             KeyboardInput {
                                 state: ElementState::Pressed,
-                                virtual_keycode: Some(key),
+                                virtual_keycode: Some(VirtualKeyCode::Return),
                                 ..
                             },
                         ..
-                    } => match key {
-                        VirtualKeyCode::Numpad1 => timer.write().split_or_start(),
-                        VirtualKeyCode::Numpad2 => timer.write().skip_split(),
-                        VirtualKeyCode::Numpad3 => timer.write().reset(true),
-                        VirtualKeyCode::Numpad4 => timer.write().switch_to_previous_comparison(),
-                        VirtualKeyCode::Numpad5 => timer.write().toggle_pause(),
-                        VirtualKeyCode::Numpad6 => timer.write().switch_to_next_comparison(),
-                        VirtualKeyCode::Numpad8 => timer.write().undo_split(),
-                        VirtualKeyCode::Return => config.save_splits(&timer.read()),
-                        _ => {}
-                    },
+                    } => config.save_splits(&timer.read()),
                     WindowEvent::MouseWheel { delta, .. } => {
                         let mut scroll = match delta {
                             MouseScrollDelta::LineDelta(_, y) => -y as i32,
@@ -839,13 +864,12 @@ fn main() {
                         }
                     }
                     winit::WindowEvent::Resized(dims) => {
+                        let dims = dims.to_physical(window.get_hidpi_factor());
                         if dims.width as u32 != resize_dims.width
                             || dims.height as u32 != resize_dims.height
                         {
                             #[cfg(feature = "gl")]
-                            surface
-                                .get_window()
-                                .resize(dims.to_physical(surface.get_window().get_hidpi_factor()));
+                            surface.get_window().resize(dims);
                             recreate_swapchain = true;
                             resize_dims.width = dims.width as u32;
                             resize_dims.height = dims.height as u32;
@@ -858,16 +882,21 @@ fn main() {
 
         // Window was resized so we must recreate swapchain and framebuffers
         if recreate_swapchain {
+            log::trace!("Recreating swapchain...");
             backend.device.wait_idle().unwrap();
 
-            let (caps, formats, _present_modes, mut composite_alphas) =
+            let (caps, formats, _present_modes) =
                 surface.compatibility(&mut adapter.physical_device);
             // Verify that previous format still exists so we may reuse it.
             assert!(formats.iter().any(|fs| fs.contains(&format)));
 
             let mut swap_config = SwapchainConfig::from_caps(&caps, format, resize_dims);
-            swap_config.composite_alpha = composite_alphas.swap_remove(0);
+            let dpi = window.get_hidpi_factor();
+            swap_config.extent.width = (swap_config.extent.width as f64 * dpi) as _;
+            swap_config.extent.height = (swap_config.extent.height as f64 * dpi) as _;
+            // swap_config.composite_alpha = composite_alphas.swap_remove(0);
             swap_config.present_mode = PresentMode::Fifo;
+
             let extent = swap_config.extent.to_extent();
 
             let (new_swap_chain, new_backbuffer) = unsafe {
@@ -975,6 +1004,10 @@ fn main() {
             }
         };
 
+        markers.tick(&timer.read());
+
+        log::trace!("Rendering...");
+
         // Rendering
         let mut cmd_buffer = backend
             .command_pool
@@ -1034,6 +1067,8 @@ fn main() {
                 .unwrap();
             backend.command_pool.free(Some(cmd_buffer));
 
+            log::trace!("Presenting frame...");
+
             // present frame
             if let Err(_) =
                 swap_chain.present_nosemaphores(&mut backend.queue_group.queues[0], frame)
@@ -1042,6 +1077,8 @@ fn main() {
             }
         }
     }
+
+    log::trace!("Final cleanup...");
 
     // cleanup!
     backend.device.wait_idle().unwrap();

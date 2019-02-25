@@ -1,9 +1,10 @@
 use {
+    crate::stream_markers,
     livesplit_core::{
         auto_splitting,
         layout::{self, Layout, LayoutSettings},
         run::{parser::composite, saver::livesplit::save_timer},
-        Run, Segment, Timer, TimingMethod,
+        HotkeyConfig, HotkeySystem, Run, Segment, Timer, TimingMethod,
     },
     serde::Deserialize,
     std::{
@@ -11,12 +12,21 @@ use {
         io::{BufReader, BufWriter, Seek, SeekFrom},
         path::{Path, PathBuf},
     },
+    winit::{Icon, WindowBuilder},
 };
 
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
+    #[serde(default)]
     general: General,
+    log: Option<Log>,
+    #[serde(default)]
+    window: Window,
+    #[serde(default)]
+    hotkeys: HotkeyConfig,
+    #[serde(default)]
+    connections: Connections,
 }
 
 #[derive(Default, Deserialize)]
@@ -26,12 +36,50 @@ struct General {
     layout: Option<PathBuf>,
     auto_splitter: Option<PathBuf>,
     timing_method: Option<TimingMethod>,
+    comparison: Option<String>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct Log {
+    path: PathBuf,
+    level: Option<log::LevelFilter>,
+    #[serde(default)]
+    clear: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(default)]
+struct Window {
+    width: u32,
+    height: u32,
+    always_on_top: bool,
+    transparency: bool,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(default)]
+struct Connections {
+    twitch: Option<String>,
+}
+
+impl Default for Window {
+    fn default() -> Window {
+        Self {
+            width: 300,
+            height: 500,
+            always_on_top: false,
+            transparency: true,
+        }
+    }
 }
 
 impl Config {
     pub fn parse(path: impl AsRef<Path>) -> Option<Config> {
         let buf = fs::read(path).ok()?;
-        toml::from_slice(&buf).ok()
+        serde_yaml::from_slice(&buf).ok()
     }
 
     pub fn parse_run(&self) -> Option<Run> {
@@ -82,6 +130,19 @@ impl Config {
         self.general.splits = Some(path);
     }
 
+    pub fn configure_hotkeys(&self, hotkeys: &mut HotkeySystem) {
+        hotkeys.set_config(self.hotkeys.clone()).ok();
+    }
+
+    pub fn configure_timer(&self, timer: &mut Timer) {
+        if self.is_game_time() {
+            timer.set_current_timing_method(TimingMethod::GameTime);
+        }
+        if let Some(comparison) = &self.general.comparison {
+            timer.set_current_comparison(comparison).ok();
+        }
+    }
+
     pub fn save_splits(&self, timer: &Timer) {
         if let Some(path) = &self.general.splits {
             // TODO: Don't ignore not being able to save.
@@ -89,5 +150,60 @@ impl Config {
                 save_timer(timer, BufWriter::new(file)).ok();
             }
         }
+    }
+
+    pub fn setup_logging(&self) {
+        if let Some(log) = &self.log {
+            if let Ok(log_file) = fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(!log.clear)
+                .truncate(log.clear)
+                .open(&log.path)
+            {
+                fern::Dispatch::new()
+                    .format(|out, message, record| {
+                        out.finish(format_args!(
+                            "{}[{}][{}] {}",
+                            chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
+                            record.target(),
+                            record.level(),
+                            message
+                        ))
+                    })
+                    .level(log.level.unwrap_or(log::LevelFilter::Warn))
+                    .chain(log_file)
+                    .apply()
+                    .ok();
+
+                #[cfg(not(debug_assertions))]
+                {
+                    std::panic::set_hook(Box::new(|panic_info| {
+                        log::error!(target: "PANIC", "{}\n{:?}", panic_info, backtrace::Backtrace::new());
+                    }));
+                }
+            }
+        }
+    }
+
+    pub fn build_window(&self) -> WindowBuilder {
+        let builder = WindowBuilder::new()
+            .with_dimensions((self.window.width, self.window.height).into())
+            .with_title("LiveSplit One")
+            .with_window_icon(Some(Icon::from_bytes(include_bytes!("icon.png")).unwrap()))
+            .with_resizable(true)
+            .with_always_on_top(self.window.always_on_top)
+            .with_transparency(self.window.transparency);
+
+        #[cfg(windows)]
+        use winit::os::windows::WindowBuilderExt;
+        #[cfg(windows)]
+        let builder = builder.with_no_raw_input(true);
+
+        builder
+    }
+
+    pub fn build_marker_client(&self) -> stream_markers::Client {
+        stream_markers::Client::new(self.connections.twitch.as_ref().map(String::as_str))
     }
 }
