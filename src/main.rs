@@ -263,15 +263,15 @@ where
         // backend.device.free_memory(image_memory);
     }
 
-    fn resize(&mut self, height: f32) {
+    fn resize(&mut self, width: f32, height: f32) {
         // // FIXME: Resizing doesn't just affect the height when the DPI is not
         // // 100% on at least Windows.
         let window = self.window;
         let dpi = window.get_hidpi_factor();
         let old_logical_size = window.get_inner_size().unwrap();
-        let new_physical_size = dpi::PhysicalSize::new(0.0, height as f64).to_logical(dpi);
+        let new_physical_size = dpi::PhysicalSize::new(width as f64, height as f64).to_logical(dpi);
         let new_logical_size =
-            dpi::LogicalSize::new(old_logical_size.width as f64, new_physical_size.height);
+            dpi::LogicalSize::new(new_physical_size.width as f64, new_physical_size.height);
         window.set_inner_size(new_logical_size);
     }
 }
