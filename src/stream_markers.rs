@@ -1,7 +1,7 @@
 use {
     livesplit_core::{Timer, TimerPhase},
-    tokio::runtime::{current_thread, Runtime},
-    twitch_stream_markers::{futures::Future, Client as MarkerClient},
+    tokio::runtime::Runtime,
+    twitch_stream_markers::Client as MarkerClient,
 };
 
 pub struct Client {
@@ -13,11 +13,11 @@ pub struct Client {
 impl Client {
     pub fn new(token: Option<&str>) -> Self {
         if let Some(token) = token {
-            if let Ok(mut rt) = current_thread::Runtime::new() {
+            if let Ok(mut rt) = Runtime::new() {
                 return Self {
                     client: rt.block_on(MarkerClient::new(token)).ok(),
                     is_running: None,
-                    runtime: Runtime::new().unwrap(),
+                    runtime: rt,
                 };
             }
         }
@@ -33,12 +33,10 @@ impl Client {
             let is_running = timer.current_phase() != TimerPhase::NotRunning;
             if !is_running {
                 if let Some(description) = self.is_running.take() {
-                    self.runtime.spawn(
-                        client
-                            .create_marker(Some(&format!("End of {}", description)))
-                            .map(drop)
-                            .map_err(drop),
-                    );
+                    let marker = client.create_marker(Some(&format!("End of {}", description)));
+                    self.runtime.spawn(async move {
+                        let _ = marker.await;
+                    });
                 }
             } else if self.is_running.is_none() {
                 let description = format!(
@@ -46,12 +44,10 @@ impl Client {
                     timer.run().attempt_count(),
                     timer.run().extended_name(false)
                 );
-                self.runtime.spawn(
-                    client
-                        .create_marker(Some(&format!("Start of {}", description)))
-                        .map(drop)
-                        .map_err(drop),
-                );
+                let marker = client.create_marker(Some(&format!("Start of {}", description)));
+                self.runtime.spawn(async {
+                    let _ = marker.await;
+                });
                 self.is_running = Some(description);
             }
         }

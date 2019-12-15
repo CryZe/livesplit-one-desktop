@@ -6,11 +6,14 @@ extern crate glsl_to_spirv_macros_impl;
 mod config;
 mod stream_markers;
 
+// #[cfg(not(debug_assertions))]
+use gfx_backend_dx12 as back;
+// #[cfg(debug_assertions)]
+// use gfx_backend_vulkan as back;
+// use gfx_backend_gl as back;
+
 use {
     crate::config::Config,
-    // gfx_backend_vulkan as back,
-    gfx_backend_dx12 as back,
-    // gfx_backend_gl as back,
     gfx_hal::{
         buffer::{self, IndexBufferView},
         command::{self, RenderPassInlineEncoder},
@@ -30,11 +33,12 @@ use {
         MemoryType, PhysicalDevice, Primitive, Swapchain, SwapchainConfig,
     },
     livesplit_core::{
-        auto_splitting,
+        // auto_splitting,
         layout::{self, Layout, LayoutSettings},
         rendering::{Backend, Mesh, Renderer, Rgba, Transform},
         run::parser::composite,
-        HotkeySystem, Timer,
+        HotkeySystem,
+        Timer,
     },
     std::{
         fs::File,
@@ -264,15 +268,11 @@ where
     }
 
     fn resize(&mut self, width: f32, height: f32) {
-        // // FIXME: Resizing doesn't just affect the height when the DPI is not
-        // // 100% on at least Windows.
-        let window = self.window;
-        let dpi = window.get_hidpi_factor();
-        let old_logical_size = window.get_inner_size().unwrap();
-        let new_physical_size = dpi::PhysicalSize::new(width as f64, height as f64).to_logical(dpi);
-        let new_logical_size =
-            dpi::LogicalSize::new(new_physical_size.width as f64, new_physical_size.height);
-        window.set_inner_size(new_logical_size);
+        // FIXME: Resizing doesn't just affect the height when the DPI is not
+        // 100% on at least Windows.
+        let dpi = self.window.get_hidpi_factor();
+        let new_logical_size = dpi::PhysicalSize::new(width as f64, height as f64).to_logical(dpi);
+        self.window.set_inner_size(new_logical_size);
     }
 }
 
@@ -290,10 +290,10 @@ fn main() {
     log::trace!("Configuring stream markers client...");
     let mut markers = config.build_marker_client();
 
-    log::trace!("Setting up auto splitter runtime...");
-    let auto_splitter = auto_splitting::Runtime::new(timer.clone());
-    log::trace!("Loading auto splitter...");
-    config.maybe_load_auto_splitter(&auto_splitter);
+    // log::trace!("Setting up auto splitter runtime...");
+    // let auto_splitter = auto_splitting::Runtime::new(timer.clone());
+    // log::trace!("Loading auto splitter...");
+    // config.maybe_load_auto_splitter(&auto_splitter);
 
     log::trace!("Setting up hotkeys...");
     let mut hotkey_system = HotkeySystem::new(timer.clone()).unwrap();

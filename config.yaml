@@ -4,27 +4,32 @@ general:
   splits: C:\Projekte\livesplit-one-desktop\livesplit-core\tests\run_files\Celeste - Any% (1.2.1.5).lss
   # splits: C:\Users\Christopher Serr\Documents\Splits\A Hat in Time (Beta Build) - 2017 Speedrunning Event.lss
 
-  layout: C:\Users\Christopher Serr\Documents\Splits\cool_columns.ls1l
+  # layout: C:\Users\Christopher Serr\Documents\Splits\cool_columns.ls1l
+  layout: C:\Users\Christopher Serr\Documents\Splits\horizontal.ls1l
+  # layout: C:\Users\Christopher Serr\Documents\Splits\cool_columns_transparent.ls1l
   # layout: C:\Users\Christopher Serr\Documents\Splits\WSplit.lsl
   # layout: C:\Users\Christopher Serr\Documents\Splits\All.lsl
   # layout: C:\Users\Christopher Serr\Documents\Splits\sva_layout.ls1l
 
   # comparison: Average Segments
 
-  # timing-method: GameTime
+  timing-method: GameTime
   # auto-splitter: C:\Users\Christopher Serr\Downloads\celeste.wasm
   # auto-splitter: C:\Users\Christopher Serr\Downloads\script (7).wasm
   # auto-splitter: C:\Projekte\python-auto-splitter\target\wasm32-unknown-unknown\release\python_auto_splitter.wasm
   # auto-splitter: C:\Users\Christopher Serr\Downloads\script (2).wasm
-  auto-splitter: C:\Users\Christopher Serr\Downloads\panic_on_notepad.wasm
+  # auto-splitter: C:\Users\Christopher Serr\Downloads\panic_on_notepad.wasm
   # auto-splitter: C:\Projekte\auto-splitter-language\target\wasm32-unknown-unknown\release\hello_world.wasm
   # auto-splitter: C:\Users\Christopher Serr\Documents\Splits\Auto Splitters\ahit_js.wasm
+  # auto-splitter: C:\Projekte\one-offs\wasi-auto-splitter\target\wasm32-unknown-wasi\release\wasi-auto-splitter.wasm
+  # auto-splitter: C:\Projekte\auto-splitter-language\assemblyscript-auto-splitter\build\optimized.wasm
+  auto-splitter: C:\Projekte\one-offs\csharp-auto-splitters\output.wasm
 
 window:
-  # width: 300
-  # height: 900
+  width: 1500
+  height: 50
   always-on-top: true
-  transparency: true
+  transparency: false
 
 hotkeys:
   # split: null
