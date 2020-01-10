@@ -1,5 +1,6 @@
 use {
     crate::stream_markers,
+    image::{png::PNGDecoder, ImageDecoder},
     livesplit_core::{
         // auto_splitting,
         layout::{self, Layout, LayoutSettings},
@@ -17,7 +18,10 @@ use {
         io::{BufReader, BufWriter, Seek, SeekFrom},
         path::{Path, PathBuf},
     },
-    winit::{Icon, WindowBuilder},
+    winit::{
+        dpi::LogicalSize,
+        window::{Icon, WindowBuilder},
+    },
 };
 
 #[derive(Default, Deserialize)]
@@ -192,18 +196,22 @@ impl Config {
     }
 
     pub fn build_window(&self) -> WindowBuilder {
+        let icon_reader = PNGDecoder::new(&include_bytes!("icon.png")[..]).unwrap();
+        let (width, height) = icon_reader.dimensions();
+        let icon_bytes = icon_reader.read_image().unwrap();
+
         let builder = WindowBuilder::new()
-            .with_dimensions((self.window.width, self.window.height).into())
+            .with_inner_size(LogicalSize {
+                width: self.window.width,
+                height: self.window.height,
+            })
             .with_title("LiveSplit One")
-            .with_window_icon(Some(Icon::from_bytes(include_bytes!("icon.png")).unwrap()))
+            .with_window_icon(Some(
+                Icon::from_rgba(icon_bytes, width as _, height as _).unwrap(),
+            ))
             .with_resizable(true)
             .with_always_on_top(self.window.always_on_top)
-            .with_transparency(self.window.transparency);
-
-        #[cfg(windows)]
-        use winit::os::windows::WindowBuilderExt;
-        #[cfg(windows)]
-        let builder = builder.with_no_raw_input(true);
+            .with_transparent(self.window.transparency);
 
         builder
     }

@@ -26,8 +26,8 @@ general:
   auto-splitter: C:\Projekte\one-offs\csharp-auto-splitters\output.wasm
 
 window:
-  width: 1500
-  height: 50
+  # width: 1500
+  # height: 50
   always-on-top: true
   transparency: false
 

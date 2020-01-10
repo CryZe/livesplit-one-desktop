@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
 log.txt
+/.vscode
+/.vs
+**/*.exe

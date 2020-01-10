@@ -1,19 +1,8 @@
 use {
     bytes::buf::BufExt,
-    // futures::{sync::oneshot, Future, Stream},
-    hyper::{
-        body::aggregate,
-        client::HttpConnector,
-        header::AUTHORIZATION, // service::service_fn_ok,
-        Body,
-        Request,
-        // Server,
-    },
-    // reqwest::{header::AUTHORIZATION, r#async::Client as HttpClient},
-    hyper_tls::HttpsConnector,
+    hyper::{body::aggregate, client::HttpConnector, header::AUTHORIZATION, Body, Request},
+    hyper_rustls::HttpsConnector,
     serde::{Deserialize, Serialize},
-    // std::sync::{Arc, Mutex},
-    // url::Url,
     std::future::Future,
 };
 
@@ -99,19 +88,4 @@ impl Client {
             Ok(markers.data.remove(0))
         }
     }
-
-    // pub fn get_markers(&self) -> impl Future<Item = Vec<Marker>, Error = Error> {
-    //     self.client
-    //         .get(
-    //             Url::parse_with_params(
-    //                 "https://api.twitch.tv/helix/streams/markers",
-    //                 &[("user_id", &self.user_id)],
-    //             )
-    //             .unwrap(),
-    //         )
-    //         .send()
-    //         .and_then(|response| response.error_for_status())
-    //         .and_then(|mut response| response.json())
-    //         .map(|markers: Response<Marker>| markers.data)
-    // }
 }

@@ -1,6 +1,6 @@
 #version 450
 
-layout(push_constant) uniform Data {
+layout(binding = 0) uniform Data {
     mat2x4 transform;
     vec4 color_tl;
     vec4 color_tr;
