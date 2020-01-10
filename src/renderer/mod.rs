@@ -241,7 +241,7 @@ impl Renderer {
 
         let mut u32_data = Vec::new();
         u32_data.extend(
-            glsl_to_spirv_macros::include_glsl_vs!("src/quad.vert")
+            glsl_to_spirv_macros::include_glsl_vs!("src/renderer/quad.vert")
                 .chunks(4)
                 .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
         );
@@ -249,7 +249,7 @@ impl Renderer {
 
         u32_data.clear();
         u32_data.extend(
-            glsl_to_spirv_macros::include_glsl_fs!("src/quad_colored.frag")
+            glsl_to_spirv_macros::include_glsl_fs!("src/renderer/quad_colored.frag")
                 .chunks(4)
                 .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
         );
@@ -257,7 +257,7 @@ impl Renderer {
 
         u32_data.clear();
         u32_data.extend(
-            glsl_to_spirv_macros::include_glsl_fs!("src/quad_textured.frag")
+            glsl_to_spirv_macros::include_glsl_fs!("src/renderer/quad_textured.frag")
                 .chunks(4)
                 .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
         );
