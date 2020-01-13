@@ -32,11 +32,4 @@ lto = true
 panic = "abort"
 
 [patch.crates-io]
-# cranelift-codegen = { path = "cranelift/cranelift-codegen" }
-# cranelift-entity = { path = "cranelift/cranelift-entity" }
-# cranelift-native = { path = "cranelift/cranelift-native" }
-# cranelift-wasm = { path = "cranelift/cranelift-wasm" }
-# wasmer-runtime = { path = "wasmer/lib/runtime" }
-# wasmer-runtime-core = { path = "wasmer/lib/runtime-core" }
-# wasmer-clif-backend = { path = "wasmer/lib/clif-backend" }
 winit = { git = "https://github.com/CryZe/winit", branch = "winit-no-raw-input" }

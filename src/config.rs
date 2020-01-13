@@ -2,7 +2,6 @@ use {
     crate::stream_markers,
     image::{png::PNGDecoder, ImageDecoder},
     livesplit_core::{
-        // auto_splitting,
         layout::{self, Layout, LayoutSettings},
         run::{parser::composite, saver::livesplit::save_timer},
         HotkeyConfig,
@@ -113,14 +112,6 @@ impl Config {
         self.general.timing_method == Some(TimingMethod::GameTime)
     }
 
-    // pub fn maybe_load_auto_splitter(&self, runtime: &auto_splitting::Runtime) {
-    //     if let Some(auto_splitter) = &self.general.auto_splitter {
-    //         if let Ok(buf) = fs::read(auto_splitter) {
-    //             runtime.load_script(buf).ok();
-    //         }
-    //     }
-    // }
-
     pub fn parse_layout(&self) -> Option<Layout> {
         let path = self.general.layout.as_ref()?;
         let mut file = BufReader::new(File::open(path).ok()?);
@@ -154,7 +145,7 @@ impl Config {
 
     pub fn save_splits(&self, timer: &Timer) {
         if let Some(path) = &self.general.splits {
-            // TODO: Don't ignore not being able to save.
+            // FIXME: Don't ignore not being able to save.
             if let Ok(file) = File::create(path) {
                 save_timer(timer, BufWriter::new(file)).ok();
             }
