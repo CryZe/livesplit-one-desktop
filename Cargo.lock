@@ -940,7 +940,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "livesplit-core"
 version = "0.11.0"
-source = "git+https://github.com/LiveSplit/livesplit-core#7b0ca7a3726c58599649d9ab12eff0e3b6868b0d"
+source = "git+https://github.com/LiveSplit/livesplit-core#facd63472f6edad5d82027ef267ef46edd638ace"
 dependencies = [
  "base64 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -973,7 +973,7 @@ dependencies = [
 [[package]]
 name = "livesplit-hotkey"
 version = "0.5.0"
-source = "git+https://github.com/LiveSplit/livesplit-core#7b0ca7a3726c58599649d9ab12eff0e3b6868b0d"
+source = "git+https://github.com/LiveSplit/livesplit-core#facd63472f6edad5d82027ef267ef46edd638ace"
 dependencies = [
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "mio 0.6.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -981,7 +981,6 @@ dependencies = [
  "promising-future 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
  "snafu 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "stdweb 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "x11-dl 2.18.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1010,7 +1009,7 @@ dependencies = [
 [[package]]
 name = "livesplit-title-abbreviations"
 version = "0.1.0"
-source = "git+https://github.com/LiveSplit/livesplit-core#7b0ca7a3726c58599649d9ab12eff0e3b6868b0d"
+source = "git+https://github.com/LiveSplit/livesplit-core#facd63472f6edad5d82027ef267ef46edd638ace"
 dependencies = [
  "unicase 2.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1978,15 +1977,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stdweb"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 1.0.44 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "storage-map"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2843,7 +2833,6 @@ dependencies = [
 "checksum spirv_cross 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fbbe441b3ac8ec0ae6a4f05234239bd372a241ce15793eef694e8b24afc267bb"
 "checksum splits-io-api 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7be2c8e1480ce7e46179dbac2c4367a862583e484ed0e134c164d83950e62af0"
 "checksum stb_truetype 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f77b6b07e862c66a9f3e62a07588fee67cd90a9135a2b942409f195507b4fb51"
-"checksum stdweb 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7b9c504d47623c911c70686c17a3321a3400942e57970d2a2959a7b3b2ade630"
 "checksum storage-map 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fd0a4829a5c591dc24a944a736d6b1e4053e51339a79fd5d4702c4c999a9c45e"
 "checksum syn 0.11.11 (registry+https://github.com/rust-lang/crates.io-index)" = "d3b891b9015c88c576343b9b3e41c2c11a51c219ef067b264bd9c8aa9b441dad"
 "checksum syn 0.15.44 (registry+https://github.com/rust-lang/crates.io-index)" = "9ca4b3b69a77cbe1ffc9e198781b7acb0c7365a883670e8f1c1bc66fba79a5c5"

@@ -239,17 +239,92 @@ impl Renderer {
         };
         let (swap_chain, intermediary_view) = create_swap_chain(&surface, &device, [width, height]);
 
+        let vs = {
+            #[allow(dead_code)]
+            #[derive(glsl_to_spirv_macros_impl::GLSLEmbedImpl)]
+            #[src = "
+#version 450
+
+layout(binding = 0) uniform Data {
+    mat2x4 transform;
+    vec4 color_tl;
+    vec4 color_tr;
+    vec4 color_bl;
+    vec4 color_br;
+} data;
+
+layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 texcoord;
+
+layout(location = 0) out vec4 color;
+layout(location = 1) out vec2 outTexcoord;
+
+void main() {
+    vec4 left = mix(data.color_tl, data.color_bl, texcoord.y);
+    vec4 right = mix(data.color_tr, data.color_br, texcoord.y);
+    color = mix(left, right, texcoord.x);
+
+    vec2 pos = vec4(position, 1, 0) * data.transform;
+    gl_Position = vec4(vec2(2, 2) * pos.xy + vec2(-1, -1), 0, 1);
+    outTexcoord = texcoord;
+}
+"]
+            #[ty = "vs"]
+            struct Dummy;
+            &DATA as &'static [u8]
+        };
+
+        let color_fs = {
+            #[allow(dead_code)]
+            #[derive(glsl_to_spirv_macros_impl::GLSLEmbedImpl)]
+            #[src = "
+#version 450
+
+layout(location = 0) in vec4 color;
+layout(location = 1) in vec2 texcoord;
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = color;
+}
+"]
+            #[ty = "fs"]
+            struct Dummy;
+            &DATA as &'static [u8]
+        };
+
+        let texture_fs = {
+            #[allow(dead_code)]
+            #[derive(glsl_to_spirv_macros_impl::GLSLEmbedImpl)]
+            #[src = "
+#version 450
+
+layout(location = 0) in vec4 color;
+layout(location = 1) in vec2 texcoord;
+layout(location = 0) out vec4 outColor;
+
+layout(binding = 1) uniform texture2D u_texture;
+layout(binding = 2) uniform sampler u_sampler;
+
+void main() {
+    outColor = color * texture(sampler2D(u_texture, u_sampler), texcoord);
+}
+"]
+            #[ty = "fs"]
+            struct Dummy;
+            &DATA as &'static [u8]
+        };
+
         let mut u32_data = Vec::new();
         u32_data.extend(
-            glsl_to_spirv_macros::include_glsl_vs!("src/renderer/quad.vert")
-                .chunks(4)
+            vs.chunks(4)
                 .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
         );
         let vs = device.create_shader_module(&u32_data);
 
         u32_data.clear();
         u32_data.extend(
-            glsl_to_spirv_macros::include_glsl_fs!("src/renderer/quad_colored.frag")
+            color_fs
                 .chunks(4)
                 .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
         );
@@ -257,7 +332,7 @@ impl Renderer {
 
         u32_data.clear();
         u32_data.extend(
-            glsl_to_spirv_macros::include_glsl_fs!("src/renderer/quad_textured.frag")
+            texture_fs
                 .chunks(4)
                 .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
         );

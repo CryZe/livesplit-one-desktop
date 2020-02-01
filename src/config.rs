@@ -4,12 +4,7 @@ use {
     livesplit_core::{
         layout::{self, Layout, LayoutSettings},
         run::{parser::composite, saver::livesplit::save_timer},
-        HotkeyConfig,
-        HotkeySystem,
-        Run,
-        Segment,
-        Timer,
-        TimingMethod,
+        HotkeyConfig, HotkeySystem, Run, Segment, Timer, TimingMethod,
     },
     serde::Deserialize,
     std::{
@@ -42,7 +37,6 @@ pub struct Config {
 struct General {
     splits: Option<PathBuf>,
     layout: Option<PathBuf>,
-    auto_splitter: Option<PathBuf>,
     timing_method: Option<TimingMethod>,
     comparison: Option<String>,
 }

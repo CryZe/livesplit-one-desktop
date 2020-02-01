@@ -1,8 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[macro_use]
-extern crate glsl_to_spirv_macros_impl;
-
 mod config;
 mod renderer;
 mod stream_markers;
