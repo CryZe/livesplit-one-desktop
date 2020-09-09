@@ -4,24 +4,20 @@ mod config;
 mod renderer;
 mod stream_markers;
 
-use {
-    crate::{config::Config, renderer::Renderer},
-    livesplit_core::{
-        layout::{self, Layout, LayoutSettings},
-        run::parser::composite,
-        HotkeySystem, Timer,
-    },
-    std::{
-        fs::File,
-        io::{prelude::*, BufReader, SeekFrom},
-    },
-    winit::{
-        dpi::PhysicalSize,
-        event::{
-            ElementState, Event, KeyboardInput, MouseScrollDelta, VirtualKeyCode, WindowEvent,
-        },
-        event_loop::{ControlFlow, EventLoop},
-    },
+use crate::{config::Config, renderer::Renderer};
+use livesplit_core::{
+    layout::{self, Layout, LayoutSettings, LayoutState},
+    run::parser::composite,
+    HotkeySystem, Timer,
+};
+use std::{
+    fs::File,
+    io::{prelude::*, BufReader, SeekFrom},
+};
+use winit::{
+    dpi::PhysicalSize,
+    event::{ElementState, Event, KeyboardInput, MouseScrollDelta, VirtualKeyCode, WindowEvent},
+    event_loop::{ControlFlow, EventLoop},
 };
 
 fn main() {
@@ -51,15 +47,17 @@ fn main() {
     let size = window.inner_size();
     let mut renderer = Renderer::new(&window, [size.width, size.height]).unwrap();
 
+    let mut layout_state = LayoutState::default();
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::MainEventsCleared => window.request_redraw(),
         Event::RedrawRequested(..) => {
             let timer = timer.read();
             markers.tick(&timer);
-            let state = layout.state(&timer);
+            layout.update_state(&mut layout_state, &timer.snapshot());
             drop(timer);
 
-            if let Some((width, height)) = renderer.render_frame(&state) {
+            if let Some((width, height)) = renderer.render_frame(&layout_state) {
                 window.set_inner_size(PhysicalSize {
                     width: width.round() as u32,
                     height: height.round() as u32,

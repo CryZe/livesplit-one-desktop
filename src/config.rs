@@ -1,6 +1,6 @@
 use {
     crate::stream_markers,
-    image::{png::PNGDecoder, ImageDecoder},
+    image::{png::PngDecoder, ImageDecoder},
     livesplit_core::{
         layout::{self, Layout, LayoutSettings},
         run::{parser::composite, saver::livesplit::save_timer},
@@ -181,11 +181,12 @@ impl Config {
     }
 
     pub fn build_window(&self) -> WindowBuilder {
-        let icon_reader = PNGDecoder::new(&include_bytes!("icon.png")[..]).unwrap();
+        let icon_reader = PngDecoder::new(&include_bytes!("icon.png")[..]).unwrap();
         let (width, height) = icon_reader.dimensions();
-        let icon_bytes = icon_reader.read_image().unwrap();
+        let mut icon_bytes = vec![0; 4 * width as usize * height as usize];
+        icon_reader.read_image(&mut icon_bytes).unwrap();
 
-        let builder = WindowBuilder::new()
+        WindowBuilder::new()
             .with_inner_size(LogicalSize {
                 width: self.window.width,
                 height: self.window.height,
@@ -196,12 +197,10 @@ impl Config {
             ))
             .with_resizable(true)
             .with_always_on_top(self.window.always_on_top)
-            .with_transparent(self.window.transparency);
-
-        builder
+            .with_transparent(self.window.transparency)
     }
 
     pub fn build_marker_client(&self) -> stream_markers::Client {
-        stream_markers::Client::new(self.connections.twitch.as_ref().map(String::as_str))
+        stream_markers::Client::new(self.connections.twitch.as_deref())
     }
 }
