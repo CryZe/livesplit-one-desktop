@@ -4,7 +4,7 @@ use {
     livesplit_core::{
         layout::{self, Layout, LayoutSettings},
         run::{parser::composite, saver::livesplit::save_timer},
-        HotkeyConfig, HotkeySystem, Run, Segment, Timer, TimingMethod,
+        HotkeyConfig, Run, Segment, Timer, TimingMethod,
     },
     serde::Deserialize,
     std::{
@@ -124,8 +124,8 @@ impl Config {
         self.general.splits = Some(path);
     }
 
-    pub fn configure_hotkeys(&self, hotkeys: &mut HotkeySystem) {
-        hotkeys.set_config(self.hotkeys.clone()).ok();
+    pub fn hotkey_config(&self) -> HotkeyConfig {
+        self.hotkeys
     }
 
     pub fn configure_timer(&self, timer: &mut Timer) {

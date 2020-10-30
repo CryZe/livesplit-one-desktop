@@ -30,8 +30,7 @@ fn main() {
 
     let mut markers = config.build_marker_client();
 
-    let mut hotkey_system = HotkeySystem::new(timer.clone()).unwrap();
-    config.configure_hotkeys(&mut hotkey_system);
+    let mut hotkey_system = HotkeySystem::with_config(timer.clone(), config.hotkey_config()).unwrap();
 
     let mut layout = config.parse_layout_or_default();
 
