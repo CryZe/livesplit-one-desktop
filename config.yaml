@@ -39,7 +39,7 @@ hotkeys:
 # connections:
   # twitch: puttheaccesstokenhere
 
-log:
-  path: log.txt
-  level: info
-  clear: true
+# log:
+#  path: log.txt
+#  level: info
+#  clear: true
