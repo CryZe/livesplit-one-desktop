@@ -1,112 +1,132 @@
+use futures_executor::block_on;
 use livesplit_core::{
     layout::LayoutState,
     rendering::{self, Backend, Mesh, Rgba, Transform, Vertex},
 };
 use raw_window_handle::HasRawWindowHandle;
+use std::{mem, rc::Rc};
 use wgpu::{
-    Adapter, AddressMode, BackendBit, BindGroupDescriptor, BindGroupLayout, BindGroupLayoutBinding,
-    BindGroupLayoutDescriptor, Binding, BindingResource, BindingType, BlendDescriptor, BlendFactor,
-    BlendOperation, Buffer, BufferCopyView, BufferUsage, Color, ColorStateDescriptor, ColorWrite,
-    CompareFunction, Device, Extent3d, FilterMode, IndexFormat, InputStepMode, LoadOp, Origin3d,
-    PipelineLayoutDescriptor, PowerPreference, PresentMode, PrimitiveTopology,
-    ProgrammableStageDescriptor, Queue, RasterizationStateDescriptor, RenderPass,
+    util::{make_spirv, BufferInitDescriptor, DeviceExt},
+    vertex_attr_array, AddressMode, BackendBit, BindGroup, BindGroupDescriptor, BindGroupEntry,
+    BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType,
+    BlendDescriptor, BlendFactor, BlendOperation, Buffer, BufferSize, BufferUsage, Color,
+    ColorStateDescriptor, ColorWrite, Device, Extent3d, FilterMode, IndexFormat, InputStepMode,
+    Instance, LoadOp, Operations, Origin3d, PipelineLayoutDescriptor, PowerPreference, PresentMode,
+    PrimitiveTopology, ProgrammableStageDescriptor, Queue, RasterizationStateDescriptor,
     RenderPassColorAttachmentDescriptor, RenderPassDescriptor, RenderPipeline,
     RenderPipelineDescriptor, RequestAdapterOptions, Sampler, SamplerDescriptor, ShaderStage,
-    StoreOp, Surface, SwapChain, SwapChainDescriptor, TextureCopyView, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureUsage, TextureView, TextureViewDimension,
-    VertexAttributeDescriptor, VertexBufferDescriptor, VertexFormat,
+    Surface, SwapChain, SwapChainDescriptor, TextureComponentType, TextureCopyView,
+    TextureDataLayout, TextureDescriptor, TextureDimension, TextureFormat, TextureUsage,
+    TextureView, TextureViewDimension, VertexBufferDescriptor, VertexStateDescriptor,
 };
+use wgpu_mipmap::{MipmapGenerator, RecommendedMipmapGenerator};
 
 const SAMPLES: u32 = 8;
 
-struct Context<'a> {
-    device: &'a mut Device,
-    queue: &'a mut Queue,
-    pass: RenderPass<'a>,
-    color_render_pipeline: &'a RenderPipeline,
-    color_bind_group_layout: &'a BindGroupLayout,
-    texture_render_pipeline: &'a RenderPipeline,
-    texture_bind_group_layout: &'a BindGroupLayout,
-    sampler: &'a Sampler,
+struct DrawCall {
+    mesh: MeshData,
+    bind_group: BindGroup,
+    use_texture_pipeline: bool,
+}
+
+struct Context {
+    device: Device,
+    queue: Queue,
+    draw_calls: Vec<DrawCall>,
+    color_bind_group_layout: BindGroupLayout,
+    texture_bind_group_layout: BindGroupLayout,
+    sampler: Sampler,
     resize_hint: Option<(f32, f32)>,
 }
 
-type MeshData = (Buffer, Buffer, u32);
+type MeshData = Rc<(Buffer, Buffer, u32)>;
 type TextureData = TextureView;
 
-impl Backend for Context<'_> {
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct Uniforms {
+    transform: [[f32; 4]; 2],
+    color_tl: [f32; 4],
+    color_tr: [f32; 4],
+    color_bl: [f32; 4],
+    color_br: [f32; 4],
+}
+
+impl Backend for Context {
     type Mesh = MeshData;
     type Texture = TextureData;
 
     fn create_mesh(&mut self, mesh: &Mesh) -> Self::Mesh {
-        let indices = mesh.indices();
-        let vertices = mesh.vertices();
-
-        let index_buffer = self
-            .device
-            .create_buffer_mapped(indices.len(), BufferUsage::INDEX)
-            .fill_from_slice(indices);
-
-        let vertex_buffer = self
-            .device
-            .create_buffer_mapped(vertices.len(), BufferUsage::VERTEX)
-            .fill_from_slice(vertices);
-
-        (vertex_buffer, index_buffer, indices.len() as _)
+        Rc::new((
+            self.device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: mesh.vertices_as_bytes(),
+                usage: BufferUsage::VERTEX,
+            }),
+            self.device.create_buffer_init(&BufferInitDescriptor {
+                label: None,
+                contents: mesh.indices_as_bytes(),
+                usage: BufferUsage::INDEX,
+            }),
+            mesh.indices().len() as _,
+        ))
     }
 
     fn render_mesh(
         &mut self,
-        (vertices, indices, count): &Self::Mesh,
+        mesh: &MeshData,
         transform: Transform,
-        [tl, tr, br, bl]: [Rgba; 4],
-        texture: Option<&Self::Texture>,
+        [color_tl, color_tr, color_br, color_bl]: [Rgba; 4],
+        texture: Option<&TextureData>,
     ) {
         let [x1, y1, z1, x2, y2, z2] = transform.to_column_major_array();
-        let buffer = self
-            .device
-            .create_buffer_mapped(6, BufferUsage::UNIFORM)
-            .fill_from_slice(&[[x1, y1, z1, 0.0], [x2, y2, z2, 0.0], tl, tr, bl, br]);
+        let buffer = self.device.create_buffer_init(&BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::bytes_of(&Uniforms {
+                transform: [[x1, y1, z1, 0.0], [x2, y2, z2, 0.0]],
+                color_tl,
+                color_tr,
+                color_bl,
+                color_br,
+            }),
+            usage: BufferUsage::UNIFORM,
+        });
 
         let bind_group = if let Some(texture_view) = texture {
-            self.pass.set_pipeline(self.texture_render_pipeline);
             self.device.create_bind_group(&BindGroupDescriptor {
-                layout: self.texture_bind_group_layout,
-                bindings: &[
-                    Binding {
+                label: None,
+                layout: &self.texture_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
                         binding: 0,
-                        resource: BindingResource::Buffer {
-                            buffer: &buffer,
-                            range: 0..(6 * 4 * 4),
-                        },
+                        resource: BindingResource::Buffer(buffer.slice(..)),
                     },
-                    Binding {
+                    BindGroupEntry {
                         binding: 1,
                         resource: BindingResource::TextureView(texture_view),
                     },
-                    Binding {
+                    BindGroupEntry {
                         binding: 2,
-                        resource: BindingResource::Sampler(self.sampler),
+                        resource: BindingResource::Sampler(&self.sampler),
                     },
                 ],
             })
         } else {
-            self.pass.set_pipeline(self.color_render_pipeline);
             self.device.create_bind_group(&BindGroupDescriptor {
-                layout: self.color_bind_group_layout,
-                bindings: &[Binding {
+                label: None,
+                layout: &self.color_bind_group_layout,
+                entries: &[BindGroupEntry {
                     binding: 0,
-                    resource: BindingResource::Buffer {
-                        buffer: &buffer,
-                        range: 0..(6 * 4 * 4),
-                    },
+                    resource: BindingResource::Buffer(buffer.slice(..)),
                 }],
             })
         };
-        self.pass.set_index_buffer(indices, 0);
-        self.pass.set_vertex_buffers(0, &[(vertices, 0)]);
-        self.pass.set_bind_group(0, &bind_group, &[]);
-        self.pass.draw_indexed(0..*count, 0, 0..1);
+
+        self.draw_calls.push(DrawCall {
+            mesh: mesh.clone(),
+            bind_group,
+            use_texture_pipeline: texture.is_some(),
+        });
     }
 
     fn free_mesh(&mut self, _mesh: Self::Mesh) {}
@@ -117,84 +137,42 @@ impl Backend for Context<'_> {
             height,
             depth: 1,
         };
-        // let mip_level_count = (width.max(height) as f64).log2().floor() as u32 + 1;
-        let texture = self.device.create_texture(&TextureDescriptor {
+        let mip_level_count = (width.max(height) as f64).log2().floor() as u32 + 1;
+        let descriptor = TextureDescriptor {
+            label: None,
             size: texture_extent,
-            array_layer_count: 1,
-            mip_level_count: 1,
+            mip_level_count,
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: TextureFormat::Rgba8Unorm,
             usage: TextureUsage::SAMPLED | TextureUsage::COPY_DST | TextureUsage::COPY_SRC,
-        });
-        let texture_view = texture.create_default_view();
+        };
+        let texture = self.device.create_texture(&descriptor);
 
-        let buffer = self
-            .device
-            .create_buffer_mapped(data.len(), BufferUsage::COPY_SRC)
-            .fill_from_slice(data);
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-        encoder.copy_buffer_to_texture(
-            BufferCopyView {
-                buffer: &buffer,
-                offset: 0,
-                row_pitch: 4 * width,
-                image_height: height,
-            },
+        self.queue.write_texture(
             TextureCopyView {
                 texture: &texture,
                 mip_level: 0,
-                array_layer: 0,
-                origin: Origin3d {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                },
+                origin: Origin3d { x: 0, y: 0, z: 0 },
+            },
+            data,
+            TextureDataLayout {
+                offset: 0,
+                bytes_per_row: 4 * width,
+                rows_per_image: height,
             },
             texture_extent,
         );
 
-        // let (mut mip_width, mut mip_height) = (width, height);
-        // for mip_level in 1..mip_level_count {
-        //     encoder.copy_texture_to_texture(
-        //         TextureCopyView {
-        //             texture: &texture,
-        //             mip_level: mip_level - 1,
-        //             array_layer: 0,
-        //             origin: Origin3d {
-        //                 x: 0.0,
-        //                 y: 0.0,
-        //                 z: 0.0,
-        //             },
-        //         },
-        //         TextureCopyView {
-        //             texture: &texture,
-        //             mip_level,
-        //             array_layer: 0,
-        //             origin: Origin3d {
-        //                 x: 0.0,
-        //                 y: 0.0,
-        //                 z: 0.0,
-        //             },
-        //         },
-        //         Extent3d {
-        //             width: if mip_width > 1 { mip_width / 2 } else { 1 },
-        //             height: if mip_height > 1 { mip_height / 2 } else { 1 },
-        //             depth: 1,
-        //         },
-        //     );
+        let mut encoder = self.device.create_command_encoder(&Default::default());
 
-        //     if mip_width > 1 {
-        //         mip_width /= 2;
-        //     }
-        //     if mip_height > 1 {
-        //         mip_height /= 2;
-        //     }
-        // }
+        RecommendedMipmapGenerator::new(&self.device)
+            .generate(&self.device, &mut encoder, &texture, &descriptor)
+            .unwrap(); // TODO: Unwrap
 
-        self.queue.submit(&[encoder.finish()]);
+        self.queue.submit(Some(encoder.finish()));
 
-        texture_view
+        texture.create_view(&Default::default())
     }
 
     fn free_texture(&mut self, _texture: Self::Texture) {}
@@ -208,34 +186,31 @@ pub struct Renderer {
     renderer: rendering::Renderer<MeshData, TextureData>,
     surface: Surface,
     swap_chain: SwapChain,
-    device: Device,
-    queue: Queue,
     color_render_pipeline: RenderPipeline,
-    color_bind_group_layout: BindGroupLayout,
     texture_render_pipeline: RenderPipeline,
-    texture_bind_group_layout: BindGroupLayout,
-    sampler: Sampler,
     intermediary_view: TextureView,
     dimensions: (f32, f32),
+    context: Context,
 }
 
 impl Renderer {
     pub fn new(window: &impl HasRawWindowHandle, [width, height]: [u32; 2]) -> Option<Self> {
-        let surface = Surface::create(window);
+        let instance = Instance::new(BackendBit::PRIMARY);
+        let surface = unsafe { instance.create_surface(window) }; // TODO: This function should be unsafe then.
 
-        let adapter = Adapter::request(&RequestAdapterOptions {
+        let adapter = block_on(instance.request_adapter(&RequestAdapterOptions {
             power_preference: PowerPreference::Default,
-            backends: BackendBit::PRIMARY,
-        })?;
+            compatible_surface: Some(&surface),
+        }))?;
 
-        let (device, queue) = adapter.request_device(&Default::default());
+        let (device, queue) = block_on(adapter.request_device(&Default::default(), None)).ok()?;
 
         let swap_desc = SwapChainDescriptor {
             usage: TextureUsage::OUTPUT_ATTACHMENT,
             format: TextureFormat::Bgra8Unorm,
             width,
             height,
-            present_mode: PresentMode::Vsync,
+            present_mode: PresentMode::Fifo,
         };
         let (swap_chain, intermediary_view) = create_swap_chain(&surface, &device, [width, height]);
 
@@ -265,7 +240,7 @@ void main() {
     color = mix(left, right, texcoord.x);
 
     vec2 pos = vec4(position, 1, 0) * data.transform;
-    gl_Position = vec4(vec2(2, 2) * pos.xy + vec2(-1, -1), 0, 1);
+    gl_Position = vec4(vec2(2, -2) * pos.xy + vec2(-1, 1), 0, 1);
     outTexcoord = texcoord;
 }
 "]
@@ -315,71 +290,70 @@ void main() {
             &DATA as &'static [u8]
         };
 
-        let mut u32_data = Vec::new();
-        u32_data.extend(
-            vs.chunks(4)
-                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
-        );
-        let vs = device.create_shader_module(&u32_data);
-
-        u32_data.clear();
-        u32_data.extend(
-            color_fs
-                .chunks(4)
-                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
-        );
-        let color_fs = device.create_shader_module(&u32_data);
-
-        u32_data.clear();
-        u32_data.extend(
-            texture_fs
-                .chunks(4)
-                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
-        );
-        let texture_fs = device.create_shader_module(&u32_data);
+        let vs = device.create_shader_module(make_spirv(vs));
+        let color_fs = device.create_shader_module(make_spirv(color_fs));
+        let texture_fs = device.create_shader_module(make_spirv(texture_fs));
 
         let color_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            bindings: &[BindGroupLayoutBinding {
+            label: None,
+            entries: &[BindGroupLayoutEntry {
                 binding: 0,
                 visibility: ShaderStage::VERTEX,
-                ty: BindingType::UniformBuffer { dynamic: false },
+                ty: BindingType::UniformBuffer {
+                    dynamic: false,
+                    min_binding_size: BufferSize::new(mem::size_of::<Uniforms>() as _),
+                },
+                count: None,
             }],
         });
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                bindings: &[
-                    BindGroupLayoutBinding {
+                label: None,
+                entries: &[
+                    BindGroupLayoutEntry {
                         binding: 0,
                         visibility: ShaderStage::VERTEX,
-                        ty: BindingType::UniformBuffer { dynamic: false },
+                        ty: BindingType::UniformBuffer {
+                            dynamic: false,
+                            min_binding_size: BufferSize::new(mem::size_of::<Uniforms>() as _),
+                        },
+                        count: None,
                     },
-                    BindGroupLayoutBinding {
+                    BindGroupLayoutEntry {
                         binding: 1,
                         visibility: ShaderStage::FRAGMENT,
                         ty: BindingType::SampledTexture {
                             multisampled: false,
                             dimension: TextureViewDimension::D2,
+                            component_type: TextureComponentType::Uint,
                         },
+                        count: None,
                     },
-                    BindGroupLayoutBinding {
+                    BindGroupLayoutEntry {
                         binding: 2,
                         visibility: ShaderStage::FRAGMENT,
-                        ty: BindingType::Sampler,
+                        ty: BindingType::Sampler { comparison: false },
+                        count: None,
                     },
                 ],
             });
 
         let color_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: None,
             bind_group_layouts: &[&color_bind_group_layout],
+            push_constant_ranges: &[],
         });
 
         let texture_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: None,
             bind_group_layouts: &[&texture_bind_group_layout],
+            push_constant_ranges: &[],
         });
 
         let mut pipeline_desc = RenderPipelineDescriptor {
-            layout: &color_pipeline_layout,
+            label: None,
+            layout: Some(&color_pipeline_layout),
             vertex_stage: ProgrammableStageDescriptor {
                 module: &vs,
                 entry_point: "main",
@@ -405,23 +379,14 @@ void main() {
                 write_mask: ColorWrite::ALL,
             }],
             depth_stencil_state: None,
-            index_format: IndexFormat::Uint16,
-            vertex_buffers: &[VertexBufferDescriptor {
-                stride: core::mem::size_of::<Vertex>() as _,
-                step_mode: InputStepMode::Vertex,
-                attributes: &[
-                    VertexAttributeDescriptor {
-                        format: VertexFormat::Float2,
-                        offset: 0,
-                        shader_location: 0,
-                    },
-                    VertexAttributeDescriptor {
-                        format: VertexFormat::Float2,
-                        offset: 2 * 4,
-                        shader_location: 1,
-                    },
-                ],
-            }],
+            vertex_state: VertexStateDescriptor {
+                index_format: IndexFormat::Uint16,
+                vertex_buffers: &[VertexBufferDescriptor {
+                    stride: mem::size_of::<Vertex>() as _,
+                    step_mode: InputStepMode::Vertex,
+                    attributes: &vertex_attr_array![0 => Float2, 1 => Float2],
+                }],
+            },
             sample_count: SAMPLES,
             sample_mask: !0,
             alpha_to_coverage_enabled: false,
@@ -429,7 +394,7 @@ void main() {
 
         let color_render_pipeline = device.create_render_pipeline(&pipeline_desc);
 
-        pipeline_desc.layout = &texture_pipeline_layout;
+        pipeline_desc.layout = Some(&texture_pipeline_layout);
         pipeline_desc.fragment_stage = Some(ProgrammableStageDescriptor {
             module: &texture_fs,
             entry_point: "main",
@@ -438,6 +403,7 @@ void main() {
         let texture_render_pipeline = device.create_render_pipeline(&pipeline_desc);
 
         let sampler = device.create_sampler(&SamplerDescriptor {
+            label: None,
             address_mode_u: AddressMode::ClampToEdge,
             address_mode_v: AddressMode::ClampToEdge,
             address_mode_w: AddressMode::ClampToEdge,
@@ -446,67 +412,83 @@ void main() {
             mipmap_filter: FilterMode::Linear,
             lod_min_clamp: -8000.0,
             lod_max_clamp: 8000.0,
-            compare_function: CompareFunction::Never,
+            compare: None,
+            anisotropy_clamp: None,
         });
 
         Some(Self {
             renderer: rendering::Renderer::new(),
             surface,
             swap_chain,
-            device,
-            queue,
             color_render_pipeline,
-            color_bind_group_layout,
             texture_render_pipeline,
-            texture_bind_group_layout,
-            sampler,
             intermediary_view,
             dimensions: (width as _, height as _),
+            context: Context {
+                device,
+                queue,
+                draw_calls: Vec::new(),
+                color_bind_group_layout,
+                texture_bind_group_layout,
+                sampler,
+                resize_hint: None,
+            },
         })
     }
 
     pub fn resize(&mut self, [width, height]: [u32; 2]) {
         let (swap_chain, intermediary_view) =
-            create_swap_chain(&self.surface, &self.device, [width, height]);
+            create_swap_chain(&self.surface, &self.context.device, [width, height]);
         self.swap_chain = swap_chain;
         self.intermediary_view = intermediary_view;
         self.dimensions = (width as _, height as _);
     }
 
     pub fn render_frame(&mut self, state: &LayoutState) -> Option<(f32, f32)> {
-        let frame = self.swap_chain.get_next_texture();
+        let frame = self.swap_chain.get_current_frame().unwrap(); // TODO: Handle error
         if self.dimensions.0 == 0.0 || self.dimensions.1 == 0.0 {
             return None;
         }
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let mut encoder = self
+            .context
+            .device
+            .create_command_encoder(&Default::default());
 
-        let pass = encoder.begin_render_pass(&RenderPassDescriptor {
+        self.context.draw_calls.clear();
+
+        self.renderer
+            .render(&mut self.context, self.dimensions, state);
+        let resize_hint = self.context.resize_hint.take();
+
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
             color_attachments: &[RenderPassColorAttachmentDescriptor {
                 attachment: &self.intermediary_view,
-                resolve_target: Some(&frame.view),
-                load_op: LoadOp::Clear,
-                store_op: StoreOp::Store,
-                clear_color: Color::TRANSPARENT,
+                resolve_target: Some(&frame.output.view),
+                ops: Operations {
+                    load: LoadOp::Clear(Color::TRANSPARENT),
+                    store: true,
+                },
             }],
             depth_stencil_attachment: None,
         });
 
-        let mut context = Context {
-            device: &mut self.device,
-            queue: &mut self.queue,
-            pass,
-            color_bind_group_layout: &self.color_bind_group_layout,
-            color_render_pipeline: &self.color_render_pipeline,
-            texture_bind_group_layout: &self.texture_bind_group_layout,
-            texture_render_pipeline: &self.texture_render_pipeline,
-            sampler: &self.sampler,
-            resize_hint: None,
-        };
-        self.renderer.render(&mut context, self.dimensions, state);
-        let resize_hint = context.resize_hint;
-        drop(context);
+        for draw_call in &self.context.draw_calls {
+            pass.set_pipeline(if draw_call.use_texture_pipeline {
+                &self.texture_render_pipeline
+            } else {
+                &self.color_render_pipeline
+            });
 
-        self.queue.submit(&[encoder.finish()]);
+            let (vertices, indices, count) = &*draw_call.mesh;
+            pass.set_index_buffer(indices.slice(..));
+            pass.set_vertex_buffer(0, vertices.slice(..));
+            pass.set_bind_group(0, &draw_call.bind_group, &[]);
+            pass.draw_indexed(0..*count, 0, 0..1);
+        }
+
+        drop(pass);
+
+        self.context.queue.submit(Some(encoder.finish()));
 
         resize_hint
     }
@@ -522,24 +504,24 @@ fn create_swap_chain(
         format: TextureFormat::Bgra8Unorm,
         width,
         height,
-        present_mode: PresentMode::Vsync,
+        present_mode: PresentMode::Fifo,
     };
     let swap_chain = device.create_swap_chain(&surface, &swap_desc);
     let intermediary_view = device
         .create_texture(&TextureDescriptor {
+            label: None,
             size: Extent3d {
                 width,
                 height,
                 depth: 1,
             },
-            array_layer_count: 1,
             mip_level_count: 1,
             sample_count: SAMPLES,
             dimension: TextureDimension::D2,
             format: TextureFormat::Bgra8Unorm,
             usage: TextureUsage::OUTPUT_ATTACHMENT,
         })
-        .create_default_view();
+        .create_view(&Default::default());
 
     (swap_chain, intermediary_view)
 }
