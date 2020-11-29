@@ -15,7 +15,7 @@ use wgpu::{
     PrimitiveTopology, ProgrammableStageDescriptor, Queue, RasterizationStateDescriptor,
     RenderPassColorAttachmentDescriptor, RenderPassDescriptor, RenderPipeline,
     RenderPipelineDescriptor, RequestAdapterOptions, Sampler, SamplerDescriptor, ShaderStage,
-    Surface, SwapChain, SwapChainDescriptor, TextureComponentType, TextureCopyView,
+    Surface, SwapChain, SwapChainDescriptor, SwapChainError, TextureComponentType, TextureCopyView,
     TextureDataLayout, TextureDescriptor, TextureDimension, TextureFormat, TextureUsage,
     TextureView, TextureViewDimension, VertexBufferDescriptor, VertexStateDescriptor,
 };
@@ -445,10 +445,21 @@ void main() {
     }
 
     pub fn render_frame(&mut self, state: &LayoutState) -> Option<(f32, f32)> {
-        let frame = self.swap_chain.get_current_frame().unwrap(); // TODO: Handle error
+        let frame = self.swap_chain.get_current_frame();
+
         if self.dimensions.0 == 0.0 || self.dimensions.1 == 0.0 {
             return None;
         }
+
+        if matches!(
+            frame,
+            Err(SwapChainError::Lost) | Err(SwapChainError::Outdated)
+        ) {
+            self.resize([self.dimensions.0 as _, self.dimensions.1 as _]);
+            return None;
+        }
+        let frame = frame.unwrap(); // TODO: Handle SwapChainError::Timeout/OutOfMemory
+
         let mut encoder = self
             .context
             .device
