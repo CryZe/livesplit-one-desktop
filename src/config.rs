@@ -195,7 +195,7 @@ impl Config {
             .with_window_icon(Some(
                 Icon::from_rgba(icon_bytes, width as _, height as _).unwrap(),
             ))
-            .with_resizable(true)
+            .with_resizable(false)
             .with_always_on_top(self.window.always_on_top)
             .with_transparent(self.window.transparency)
     }

@@ -1,15 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
-mod renderer;
+// mod renderer;
 mod stream_markers;
 
-use crate::{config::Config, renderer::Renderer};
+use crate::config::Config;
 use livesplit_core::{
     layout::{self, Layout, LayoutSettings, LayoutState},
+    rendering::software::BorrowedSoftwareRenderer,
     run::parser::composite,
     HotkeySystem, Timer,
 };
+use pixels::{Pixels, SurfaceTexture};
 use std::{
     fs::File,
     io::{prelude::*, BufReader, SeekFrom},
@@ -45,7 +47,13 @@ fn main() {
     let window = config.build_window().build(&event_loop).unwrap();
 
     let size = window.inner_size();
-    let mut renderer = Renderer::new(&window, [size.width, size.height]).unwrap();
+    let mut renderer = BorrowedSoftwareRenderer::new();
+
+    let mut pixels = {
+        let surface_texture = SurfaceTexture::new(size.width, size.height, &window);
+        Pixels::new(size.width, size.height, surface_texture)
+            .expect("Failed to init the pixel buffer")
+    };
 
     let mut layout_state = LayoutState::default();
 
@@ -57,11 +65,19 @@ fn main() {
             layout.update_state(&mut layout_state, &timer.snapshot());
             drop(timer);
 
-            if let Some((width, height)) = renderer.render_frame(&layout_state) {
+            let frame = pixels.get_frame();
+
+            if let Some((width, height)) =
+                renderer.render(&layout_state, frame, [size.width, size.height], size.width)
+            {
                 window.set_inner_size(PhysicalSize {
                     width: width.round() as u32,
                     height: height.round() as u32,
                 });
+            }
+
+            if let Err(e) = pixels.render() {
+                log::error!("{}", e);
             }
         }
         Event::WindowEvent { event, .. } => match event {
@@ -111,9 +127,7 @@ fn main() {
                     }
                 }
             }
-            WindowEvent::Resized(new_size) => {
-                renderer.resize([new_size.width, new_size.height]);
-            }
+            WindowEvent::Resized(new_size) => pixels.resize(new_size.width, new_size.height),
             _ => {}
         },
         _ => {}
