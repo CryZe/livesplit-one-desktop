@@ -152,7 +152,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') && matrix.release == ''
         uses: softprops/action-gh-release@v1
         with:
-          files: obs-livesplit-one-*.*
+          files: livesplit-one-*.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

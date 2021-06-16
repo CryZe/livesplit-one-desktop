@@ -12,9 +12,9 @@ main() {
     fi
 
     if [ "$OS_NAME" = "ubuntu-latest" ]; then
-        cp target/$TARGET/release/livesplit_one $stage/.
+        cp target/$TARGET/release/livesplit-one $stage/.
     elif [ "$OS_NAME" = "macOS-latest" ]; then
-        cp target/$TARGET/release/livesplit_one $stage/.
+        cp target/$TARGET/release/livesplit-one $stage/.
     elif [ "$OS_NAME" = "windows-latest" ]; then
         cp target/$TARGET/release/livesplit-one.exe $stage/.
     fi
