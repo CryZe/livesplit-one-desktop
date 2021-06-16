@@ -1,12 +1,13 @@
-use {
-    bytes::buf::BufExt,
-    hyper::{body::aggregate, client::HttpConnector, header::AUTHORIZATION, Body, Request},
-    hyper_rustls::HttpsConnector,
-    serde::{Deserialize, Serialize},
-    std::future::Future,
+use anyhow::Context;
+use hyper::{
+    body::{aggregate, Buf},
+    client::HttpConnector,
+    header::AUTHORIZATION,
+    Body, Request,
 };
-
-// pub use futures;
+use hyper_rustls::HttpsConnector;
+use serde::{Deserialize, Serialize};
+use std::future::Future;
 
 #[derive(Serialize)]
 struct CreateMarker<'a> {
@@ -39,9 +40,9 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn new(token: impl AsRef<str>) -> anyhow::Result<Self> {
-        let auth = format!("Bearer {}", token.as_ref());
-        let https = HttpsConnector::new();
+    pub async fn new(token: &str) -> anyhow::Result<Self> {
+        let auth = format!("Bearer {}", token);
+        let https = HttpsConnector::with_native_roots();
         let client = hyper::Client::builder().build(https);
 
         let response = client
@@ -54,11 +55,16 @@ impl Client {
             .await?;
 
         let bytes = aggregate(response.into_body()).await?;
-        let mut users: Response<User> = serde_json::from_reader(bytes.reader())?;
+        let users: Response<User> = serde_json::from_reader(bytes.reader())?;
 
         Ok(Self {
             client,
-            user_id: users.data.remove(0).id,
+            user_id: users
+                .data
+                .into_iter()
+                .next()
+                .context("Twitch didn't respond with a User ID.")?
+                .id,
             auth,
         })
     }
@@ -73,7 +79,7 @@ impl Client {
                 .body(
                     serde_json::to_vec(&CreateMarker {
                         user_id: &self.user_id,
-                        description: description.into(),
+                        description,
                     })
                     .unwrap()
                     .into(),
@@ -83,9 +89,13 @@ impl Client {
 
         async move {
             let bytes = aggregate(request.await?.into_body()).await?;
-            let mut markers: Response<Marker> = serde_json::from_reader(bytes.reader())?;
+            let markers: Response<Marker> = serde_json::from_reader(bytes.reader())?;
 
-            Ok(markers.data.remove(0))
+            Ok(markers
+                .data
+                .into_iter()
+                .next()
+                .context("Twitch didn't respond with a marker.")?)
         }
     }
 }

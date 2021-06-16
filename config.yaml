@@ -1,11 +1,14 @@
 general:
+  # splits: C:\Users\Christopher Serr\Documents\Splits\Celeste - Any% (1.3.1.2).lss
+  # splits: C:\Users\Christopher Serr\Documents\Splits\Portal - Inbounds.lss
   # splits: C:\Users\Christopher Serr\Documents\Splits\8dj.lss
   # splits: C:\Users\Christopher Serr\Documents\Splits\The Legend of Zelda Breath of the Wild - Any% (Normal Mode, DLC, No Amiibo).lss
-  splits: C:\Projekte\livesplit-one-desktop\livesplit-core\tests\run_files\Celeste - Any% (1.2.1.5).lss
+  # splits: C:\Projekte\livesplit-one-desktop\livesplit-core\tests\run_files\Celeste - Any% (1.2.1.5).lss
   # splits: C:\Users\Christopher Serr\Documents\Splits\A Hat in Time (Beta Build) - 2017 Speedrunning Event.lss
 
+  # layout: C:\Users\Christopher Serr\Documents\Splits\celeste_practice_layout.ls1l
   # layout: C:\Users\Christopher Serr\Documents\Splits\cool_columns.ls1l
-  layout: C:\Users\Christopher Serr\Documents\Splits\horizontal.ls1l
+  # layout: C:\Users\Christopher Serr\Documents\Splits\horizontal.ls1l
   # layout: C:\Users\Christopher Serr\Documents\Splits\cool_columns_transparent.ls1l
   # layout: C:\Users\Christopher Serr\Documents\Splits\WSplit.lsl
   # layout: C:\Users\Christopher Serr\Documents\Splits\All.lsl
@@ -13,7 +16,8 @@ general:
 
   # comparison: Average Segments
 
-  timing-method: GameTime
+  # timing-method: GameTime
+  # auto-splitter: C:\Projekte\celeste-auto-splitter\target\wasm32-unknown-unknown\release\celeste.wasm
   # auto-splitter: C:\Users\Christopher Serr\Downloads\celeste.wasm
   # auto-splitter: C:\Users\Christopher Serr\Downloads\script (7).wasm
   # auto-splitter: C:\Projekte\python-auto-splitter\target\wasm32-unknown-unknown\release\python_auto_splitter.wasm
@@ -23,18 +27,19 @@ general:
   # auto-splitter: C:\Users\Christopher Serr\Documents\Splits\Auto Splitters\ahit_js.wasm
   # auto-splitter: C:\Projekte\one-offs\wasi-auto-splitter\target\wasm32-unknown-wasi\release\wasi-auto-splitter.wasm
   # auto-splitter: C:\Projekte\auto-splitter-language\assemblyscript-auto-splitter\build\optimized.wasm
-  auto-splitter: C:\Projekte\one-offs\csharp-auto-splitters\output.wasm
+  # auto-splitter: C:\Projekte\one-offs\csharp-auto-splitters\output.wasm
 
 window:
   # width: 1500
   # height: 50
   always-on-top: true
-  transparency: false
+  transparency: true
+  # fps: 40
 
-hotkeys:
-  # split: null
-  undo_all_pauses: NumPad7
-  toggle_timing_method: NumPad9
+# hotkeys:
+#   # split: null
+#   undo_all_pauses: NumPad7
+#   toggle_timing_method: NumPad9
 
 # connections:
   # twitch: puttheaccesstokenhere

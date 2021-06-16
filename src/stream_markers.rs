@@ -1,8 +1,6 @@
-use {
-    livesplit_core::{Timer, TimerPhase},
-    tokio::runtime::Runtime,
-    twitch_stream_markers::Client as MarkerClient,
-};
+use livesplit_core::{Timer, TimerPhase};
+use tokio::runtime::Runtime;
+use twitch_stream_markers::Client as MarkerClient;
 
 pub struct Client {
     client: Option<MarkerClient>,
@@ -13,7 +11,7 @@ pub struct Client {
 impl Client {
     pub fn new(token: Option<&str>) -> Self {
         if let Some(token) = token {
-            if let Ok(mut rt) = Runtime::new() {
+            if let Ok(rt) = Runtime::new() {
                 return Self {
                     client: rt.block_on(MarkerClient::new(token)).ok(),
                     is_running: None,

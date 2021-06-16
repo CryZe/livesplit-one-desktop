@@ -1,27 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
-mod renderer;
 mod stream_markers;
 
-use crate::{config::Config, renderer::Renderer};
-use livesplit_core::{
-    layout::{self, Layout, LayoutSettings, LayoutState},
-    run::parser::composite,
-    HotkeySystem, Timer,
-};
-use std::{
-    fs::File,
-    io::{prelude::*, BufReader, SeekFrom},
-};
-use winit::{
-    dpi::PhysicalSize,
-    event::{ElementState, Event, KeyboardInput, MouseScrollDelta, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-};
+use crate::config::Config;
+use livesplit_core::{layout::LayoutState, rendering::software::Renderer, HotkeySystem, Timer};
+use minifb::{Key, KeyRepeat};
 
 fn main() {
-    let mut config = Config::parse("config.yaml").unwrap_or_default();
+    let config = Config::parse("config.yaml").unwrap_or_default();
     config.setup_logging();
 
     let run = config.parse_run_or_default();
@@ -35,87 +22,63 @@ fn main() {
 
     let mut layout = config.parse_layout_or_default();
 
-    #[cfg(windows)]
-    use winit::platform::windows::EventLoopExtWindows;
-    #[cfg(windows)]
-    let event_loop = EventLoop::<()>::new_no_raw_input();
-    #[cfg(not(windows))]
-    let event_loop = EventLoop::new();
+    let mut window = config.build_window().unwrap();
 
-    let window = config.build_window().build(&event_loop).unwrap();
-
-    let size = window.inner_size();
-    let mut renderer = Renderer::new(&window, [size.width, size.height]).unwrap();
-
+    let mut renderer = Renderer::new();
     let mut layout_state = LayoutState::default();
+    let mut buf = Vec::new();
 
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::MainEventsCleared => window.request_redraw(),
-        Event::RedrawRequested(..) => {
+    while window.is_open() {
+        if let Some((_, val)) = window.get_scroll_wheel() {
+            if val > 0.0 {
+                layout.scroll_up();
+            } else if val < 0.0 {
+                layout.scroll_down();
+            }
+        }
+
+        if window.is_key_pressed(Key::Enter, KeyRepeat::No) {
+            config.save_splits(&timer.read());
+        }
+
+        let (width, height) = window.get_size();
+
+        {
             let timer = timer.read();
             markers.tick(&timer);
             layout.update_state(&mut layout_state, &timer.snapshot());
-            drop(timer);
+        }
+        renderer.render(&layout_state, [width as _, height as _]);
 
-            if let Some((width, height)) = renderer.render_frame(&layout_state) {
-                window.set_inner_size(PhysicalSize {
-                    width: width.round() as u32,
-                    height: height.round() as u32,
-                });
+        buf.resize(width * height, 0);
+
+        transpose(
+            bytemuck::cast_slice_mut(&mut buf),
+            bytemuck::cast_slice(renderer.image_data()),
+        );
+
+        window.update_with_buffer(&buf, width, height).unwrap();
+    }
+}
+
+pub fn transpose(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
+    #[repr(transparent)]
+    pub struct Chunk([[u8; 4]; 4]);
+
+    unsafe {
+        let (dst_before, dst, dst_after) = dst.align_to_mut::<Chunk>();
+        let (src_before, src, src_after) = src.align_to::<Chunk>();
+
+        for (dst, &[r, g, b, a]) in dst_before.iter_mut().zip(src_before) {
+            *dst = [b, g, r, a];
+        }
+        for (dst, src) in dst.iter_mut().zip(src) {
+            for (dst, &[r, g, b, a]) in dst.0.iter_mut().zip(&src.0) {
+                *dst = [b, g, r, a];
             }
         }
-        Event::WindowEvent { event, .. } => match event {
-            WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Return),
-                        ..
-                    },
-                ..
-            } => config.save_splits(&timer.read()),
-            WindowEvent::MouseWheel { delta, .. } => {
-                let mut scroll = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => -y as i32,
-                    MouseScrollDelta::PixelDelta(delta) => (delta.y / 15.0) as i32,
-                };
-                while scroll < 0 {
-                    layout.scroll_up();
-                    scroll += 1;
-                }
-                while scroll > 0 {
-                    layout.scroll_down();
-                    scroll -= 1;
-                }
-            }
-            WindowEvent::DroppedFile(path) => {
-                let mut file = BufReader::new(File::open(&path).unwrap());
-                if composite::parse(&mut file, Some(path.clone()), true)
-                    .map_err(drop)
-                    .and_then(|run| {
-                        timer.write().set_run(run.run).map_err(drop)?;
-                        config.set_splits_path(path);
-                        Ok(())
-                    })
-                    .is_err()
-                {
-                    let _ = file.seek(SeekFrom::Start(0));
-                    if let Ok(settings) = LayoutSettings::from_json(&mut file) {
-                        layout = Layout::from_settings(settings);
-                    } else {
-                        let _ = file.seek(SeekFrom::Start(0));
-                        if let Ok(parsed_layout) = layout::parser::parse(&mut file) {
-                            layout = parsed_layout;
-                        }
-                    }
-                }
-            }
-            WindowEvent::Resized(new_size) => {
-                renderer.resize([new_size.width, new_size.height]);
-            }
-            _ => {}
-        },
-        _ => {}
-    });
+        for (dst, &[r, g, b, a]) in dst_after.iter_mut().zip(src_after) {
+            *dst = [b, g, r, a];
+        }
+    }
 }

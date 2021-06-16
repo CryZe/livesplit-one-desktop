@@ -1,21 +1,15 @@
-use {
-    crate::stream_markers,
-    image::{png::PngDecoder, ImageDecoder},
-    livesplit_core::{
-        layout::{self, Layout, LayoutSettings},
-        run::{parser::composite, saver::livesplit::save_timer},
-        HotkeyConfig, HotkeySystem, Run, Segment, Timer, TimingMethod,
-    },
-    serde::Deserialize,
-    std::{
-        fs::{self, File},
-        io::{BufReader, BufWriter, Seek, SeekFrom},
-        path::{Path, PathBuf},
-    },
-    winit::{
-        dpi::LogicalSize,
-        window::{Icon, WindowBuilder},
-    },
+use crate::stream_markers;
+use livesplit_core::{
+    layout::{self, Layout, LayoutSettings},
+    run::{parser::composite, saver::livesplit::save_timer},
+    HotkeyConfig, HotkeySystem, Run, Segment, Timer, TimingMethod,
+};
+use serde::Deserialize;
+use std::{
+    fs::{self, File},
+    io::{BufReader, BufWriter, Seek, SeekFrom},
+    path::{Path, PathBuf},
+    time::Duration,
 };
 
 #[derive(Default, Deserialize)]
@@ -54,10 +48,11 @@ struct Log {
 #[serde(rename_all = "kebab-case")]
 #[serde(default)]
 struct Window {
-    width: u32,
-    height: u32,
+    width: usize,
+    height: usize,
     always_on_top: bool,
     transparency: bool,
+    fps: f32,
 }
 
 #[derive(Default, Deserialize)]
@@ -74,6 +69,7 @@ impl Default for Window {
             height: 500,
             always_on_top: false,
             transparency: true,
+            fps: 60.0,
         }
     }
 }
@@ -120,12 +116,12 @@ impl Config {
         self.parse_layout().unwrap_or_else(Layout::default_layout)
     }
 
-    pub fn set_splits_path(&mut self, path: PathBuf) {
-        self.general.splits = Some(path);
-    }
+    // pub fn set_splits_path(&mut self, path: PathBuf) {
+    //     self.general.splits = Some(path);
+    // }
 
     pub fn configure_hotkeys(&self, hotkeys: &mut HotkeySystem) {
-        hotkeys.set_config(self.hotkeys.clone()).ok();
+        hotkeys.set_config(self.hotkeys).ok();
     }
 
     pub fn configure_timer(&self, timer: &mut Timer) {
@@ -180,24 +176,23 @@ impl Config {
         }
     }
 
-    pub fn build_window(&self) -> WindowBuilder {
-        let icon_reader = PngDecoder::new(&include_bytes!("icon.png")[..]).unwrap();
-        let (width, height) = icon_reader.dimensions();
-        let mut icon_bytes = vec![0; 4 * width as usize * height as usize];
-        icon_reader.read_image(&mut icon_bytes).unwrap();
+    pub fn build_window(&self) -> Result<minifb::Window, minifb::Error> {
+        let mut window = minifb::Window::new(
+            "LiveSplit One",
+            self.window.width,
+            self.window.height,
+            minifb::WindowOptions {
+                // borderless: true,
+                resize: true,
+                topmost: self.window.always_on_top,
+                // transparency: self.window.transparency,
+                ..Default::default()
+            },
+        )?;
 
-        WindowBuilder::new()
-            .with_inner_size(LogicalSize {
-                width: self.window.width,
-                height: self.window.height,
-            })
-            .with_title("LiveSplit One")
-            .with_window_icon(Some(
-                Icon::from_rgba(icon_bytes, width as _, height as _).unwrap(),
-            ))
-            .with_resizable(true)
-            .with_always_on_top(self.window.always_on_top)
-            .with_transparent(self.window.transparency)
+        window.limit_update_rate(Some(Duration::from_secs_f32(self.window.fps.recip())));
+
+        Ok(window)
     }
 
     pub fn build_marker_client(&self) -> stream_markers::Client {
