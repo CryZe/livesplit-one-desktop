@@ -1,0 +1,194 @@
+name: Rust
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 'master'
+    tags:
+      - '*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        label:
+          # - Windows aarch64
+          # - Windows i686
+          - Windows x86_64
+          # - Linux arm Hardware Float
+          # - Linux armv7 Hardware Float
+          # - Linux aarch64
+          # - Linux i686
+          - Linux x86_64
+          # - macOS aarch64
+          - macOS x86_64
+
+        include:
+          # - label: Windows aarch64
+          #   target: aarch64-pc-windows-msvc
+          #   os: windows-latest
+          #   cross: skip
+          #   install_target: true
+
+          # - label: Windows i686
+          #   target: i686-pc-windows-msvc
+          #   os: windows-latest
+          #   cross: skip
+          #   install_target: true
+          #   bits: 32bit
+
+          - label: Windows x86_64
+            target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cross: skip
+
+          # - label: Linux arm Hardware Float
+          #   target: arm-unknown-linux-gnueabihf
+          #   os: ubuntu-latest
+          #   features: --no-default-features
+          #   bits: 32bit
+
+          # - label: Linux armv7 Hardware Float
+          #   target: armv7-unknown-linux-gnueabihf
+          #   os: ubuntu-latest
+          #   features: --no-default-features
+          #   bits: 32bit
+
+          # - label: Linux aarch64
+          #   target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   features: --no-default-features
+
+          # - label: Linux i686
+          #   target: i686-unknown-linux-gnu
+          #   os: ubuntu-latest
+          #   features: --no-default-features
+          #   bits: 32bit
+
+          - label: Linux x86_64
+            target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: skip
+
+          # - label: macOS aarch64
+          #   target: aarch64-apple-darwin
+          #   os: macOS-latest
+          #   cross: skip
+          #   install_target: true
+
+          - label: macOS x86_64
+            target: x86_64-apple-darwin
+            os: macOS-latest
+            cross: skip
+
+    steps:
+      - name: Checkout Commit
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: ${{ matrix.toolchain || 'stable' }}
+
+      - name: Install Target
+        if: matrix.install_target != ''
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.cross == ''
+        run: sh .github/workflows/install.sh
+        env:
+          OS_NAME: ${{ matrix.os }}
+          TARGET: ${{ matrix.target }}
+
+      - name: Cache
+        uses: Swatinem/rust-cache@ce325b60658c1b38465c06cc965b79baf32c1e72
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Select XCode to use
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_12.3.app"
+          sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
+
+      - name: Install cross
+        if: matrix.cross == ''
+        run: sh .github/workflows/install.sh
+        env:
+          OS_NAME: ${{ matrix.os }}
+
+      - name: Install Dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install libxkbcommon-dev libwayland-cursor0 libwayland-dev
+
+      - name: Build
+        if: matrix.dylib == ''
+        run: sh .github/workflows/build.sh
+        env:
+          TARGET: ${{ matrix.target }}
+          SKIP_CROSS: ${{ matrix.cross }}
+          IS_DEPLOY: ${{ startsWith(github.ref, 'refs/tags/') && (matrix.release_anyway != '' || !(startsWith(matrix.toolchain, 'nightly') || startsWith(matrix.toolchain, 'beta'))) }}
+          FEATURES: ${{ matrix.features }}
+          OS_NAME: ${{ matrix.os }}
+
+      - name: Prepare Release
+        if: startsWith(github.ref, 'refs/tags/') && matrix.release == ''
+        shell: bash
+        run: .github/workflows/before_deploy.sh
+        env:
+          OS_NAME: ${{ matrix.os }}
+          TARGET: ${{ matrix.target }}
+          PLUGIN_BITS: ${{ matrix.bits || '64bit' }}
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/') && matrix.release == ''
+        uses: softprops/action-gh-release@v1
+        with:
+          files: obs-livesplit-one-*.*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Commit
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: hecrj/setup-rust-action@v1
+        with:
+          components: clippy
+
+      - name: Cache
+        uses: Swatinem/rust-cache@ce325b60658c1b38465c06cc965b79baf32c1e72
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get install libxkbcommon-dev libwayland-cursor0 libwayland-dev
+
+      - name: Run Clippy
+        run: cargo clippy --all-features
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Commit
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: hecrj/setup-rust-action@v1
+        with:
+          components: rustfmt
+
+      - name: Run cargo fmt
+        run: cargo fmt -- --check || true
