@@ -124,7 +124,7 @@ jobs:
         env:
           OS_NAME: ${{ matrix.os }}
 
-      - name: Install dependencies
+      - name: Install Dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get install libxkbcommon-dev libwayland-cursor0 libwayland-dev
@@ -167,7 +167,12 @@ jobs:
         with:
           components: clippy
 
-      - name: Install dependencies
+      - name: Cache
+        uses: Swatinem/rust-cache@ce325b60658c1b38465c06cc965b79baf32c1e72
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install Dependencies
         run: |
           sudo apt-get install libxkbcommon-dev libwayland-cursor0 libwayland-dev
 
