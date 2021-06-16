@@ -124,6 +124,11 @@ jobs:
         env:
           OS_NAME: ${{ matrix.os }}
 
+      - name: Install dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install libxkbcommon-dev libwayland-cursor0 libwayland-dev
+
       - name: Build
         if: matrix.dylib == ''
         run: sh .github/workflows/build.sh
@@ -161,6 +166,10 @@ jobs:
         uses: hecrj/setup-rust-action@v1
         with:
           components: clippy
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install libxkbcommon-dev libwayland-cursor0 libwayland-dev
 
       - name: Run Clippy
         run: cargo clippy --all-features
