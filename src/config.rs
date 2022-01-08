@@ -1,8 +1,10 @@
 use crate::stream_markers;
+use core::fmt;
 use livesplit_core::{
+    auto_splitting,
     layout::{self, Layout, LayoutSettings},
     run::{parser::composite, saver::livesplit::save_timer},
-    HotkeyConfig, HotkeySystem, Run, Segment, Timer, TimingMethod,
+    HotkeyConfig, HotkeySystem, Run, Segment, SharedTimer, Timer, TimingMethod,
 };
 use serde::Deserialize;
 use std::{
@@ -33,6 +35,7 @@ struct General {
     layout: Option<PathBuf>,
     timing_method: Option<TimingMethod>,
     comparison: Option<String>,
+    auto_splitter: Option<PathBuf>,
 }
 
 #[derive(Default, Deserialize)]
@@ -120,8 +123,8 @@ impl Config {
     //     self.general.splits = Some(path);
     // }
 
-    pub fn configure_hotkeys(&self, hotkeys: &mut HotkeySystem) {
-        hotkeys.set_config(self.hotkeys).ok();
+    pub fn create_hotkey_system(&self, timer: SharedTimer) -> Option<HotkeySystem> {
+        HotkeySystem::with_config(timer, self.hotkeys).ok()
     }
 
     pub fn configure_timer(&self, timer: &mut Timer) {
@@ -197,5 +200,31 @@ impl Config {
 
     pub fn build_marker_client(&self) -> stream_markers::Client {
         stream_markers::Client::new(self.connections.twitch.as_deref())
+    }
+
+    pub fn maybe_load_auto_splitter(&self, runtime: &auto_splitting::Runtime) {
+        if let Some(auto_splitter) = &self.general.auto_splitter {
+            if let Err(e) = runtime.load_script(auto_splitter.clone()) {
+                log::error!("Auto Splitter failed to load: {}", ErrorChain(&e));
+            }
+        }
+    }
+}
+
+struct ErrorChain<'a>(&'a dyn std::error::Error);
+
+impl fmt::Display for ErrorChain<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut error = self.0;
+        fmt::Display::fmt(error, f)?;
+        if error.source().is_some() {
+            f.write_str("\nCaused by:\n")?;
+        }
+        while let Some(source) = error.source() {
+            error = source;
+            fmt::Display::fmt(error, f)?;
+            f.write_str("\n")?;
+        }
+        Ok(())
     }
 }

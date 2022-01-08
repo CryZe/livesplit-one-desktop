@@ -4,8 +4,13 @@ mod config;
 mod stream_markers;
 
 use crate::config::Config;
-use livesplit_core::{layout::LayoutState, rendering::software::Renderer, HotkeySystem, Timer};
+use bytemuck::{Pod, Zeroable};
+use livesplit_core::{auto_splitting, layout::LayoutState, rendering::software::Renderer, Timer};
+use mimalloc::MiMalloc;
 use minifb::{Key, KeyRepeat};
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
     let config = Config::parse("config.yaml").unwrap_or_default();
@@ -17,8 +22,10 @@ fn main() {
 
     let mut markers = config.build_marker_client();
 
-    let mut hotkey_system = HotkeySystem::new(timer.clone()).unwrap();
-    config.configure_hotkeys(&mut hotkey_system);
+    let auto_splitter = auto_splitting::Runtime::new(timer.clone());
+    config.maybe_load_auto_splitter(&auto_splitter);
+
+    let _hotkey_system = config.create_hotkey_system(timer.clone());
 
     let mut layout = config.parse_layout_or_default();
 
@@ -42,43 +49,42 @@ fn main() {
         }
 
         let (width, height) = window.get_size();
+        if width != 0 && height != 0 {
+            {
+                let timer = timer.read();
+                markers.tick(&timer);
+                layout.update_state(&mut layout_state, &timer.snapshot());
+            }
+            renderer.render(&layout_state, [width as _, height as _]);
 
-        {
-            let timer = timer.read();
-            markers.tick(&timer);
-            layout.update_state(&mut layout_state, &timer.snapshot());
+            buf.resize(width * height, 0);
+
+            transpose(
+                bytemuck::cast_slice_mut(&mut buf),
+                bytemuck::cast_slice(renderer.image_data()),
+            );
         }
-        renderer.render(&layout_state, [width as _, height as _]);
-
-        buf.resize(width * height, 0);
-
-        transpose(
-            bytemuck::cast_slice_mut(&mut buf),
-            bytemuck::cast_slice(renderer.image_data()),
-        );
-
         window.update_with_buffer(&buf, width, height).unwrap();
     }
 }
 
 pub fn transpose(dst: &mut [[u8; 4]], src: &[[u8; 4]]) {
+    #[derive(Copy, Clone, Pod, Zeroable)]
     #[repr(transparent)]
-    pub struct Chunk([[u8; 4]; 4]);
+    pub struct Chunk([[u8; 4]; 8]);
 
-    unsafe {
-        let (dst_before, dst, dst_after) = dst.align_to_mut::<Chunk>();
-        let (src_before, src, src_after) = src.align_to::<Chunk>();
+    let (dst_before, dst, dst_after) = bytemuck::pod_align_to_mut::<_, Chunk>(dst);
+    let (src_before, src, src_after) = bytemuck::pod_align_to::<_, Chunk>(src);
 
-        for (dst, &[r, g, b, a]) in dst_before.iter_mut().zip(src_before) {
+    for (dst, &[r, g, b, a]) in dst_before.iter_mut().zip(src_before) {
+        *dst = [b, g, r, a];
+    }
+    for (dst, src) in dst.iter_mut().zip(src) {
+        for (dst, &[r, g, b, a]) in dst.0.iter_mut().zip(&src.0) {
             *dst = [b, g, r, a];
         }
-        for (dst, src) in dst.iter_mut().zip(src) {
-            for (dst, &[r, g, b, a]) in dst.0.iter_mut().zip(&src.0) {
-                *dst = [b, g, r, a];
-            }
-        }
-        for (dst, &[r, g, b, a]) in dst_after.iter_mut().zip(src_after) {
-            *dst = [b, g, r, a];
-        }
+    }
+    for (dst, &[r, g, b, a]) in dst_after.iter_mut().zip(src_after) {
+        *dst = [b, g, r, a];
     }
 }
