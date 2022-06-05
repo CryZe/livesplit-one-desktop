@@ -13,7 +13,7 @@ use minifb::{Key, KeyRepeat};
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() {
-    let config = Config::parse("config.yaml").unwrap_or_default();
+    let config = Config::load();
     config.setup_logging();
 
     let run = config.parse_run_or_default();

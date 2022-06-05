@@ -1,5 +1,6 @@
 use crate::stream_markers;
 use core::fmt;
+use directories;
 use livesplit_core::{
     auto_splitting,
     layout::{self, Layout, LayoutSettings},
@@ -13,6 +14,8 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+
+static CONFIG_FILE_NAME: &'static str = "config.yaml";
 
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -78,6 +81,18 @@ impl Default for Window {
 }
 
 impl Config {
+    pub fn load() -> Config {
+        match directories::ProjectDirs::from("", "LiveSplit", "LiveSplit One") {
+            Some(project_dirs) => {
+                let config_file_path = project_dirs.config_dir().join(CONFIG_FILE_NAME);
+
+                Config::parse(config_file_path)
+                    .unwrap_or_else(|| Config::parse(CONFIG_FILE_NAME).unwrap_or_default())
+            }
+            None => Config::parse(CONFIG_FILE_NAME).unwrap_or_default(),
+        }
+    }
+
     pub fn parse(path: impl AsRef<Path>) -> Option<Config> {
         let buf = fs::read(path).ok()?;
         serde_yaml::from_slice(&buf).ok()
