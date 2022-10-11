@@ -10,16 +10,16 @@ default = []
 [dependencies]
 backtrace = "0.3.13"
 bytemuck = "1.4.1"
-chrono = { version = "0.4.0", features = ["serde", "clock"], default-features = false }
 fern = "0.6.0"
+humantime = "2.1.0"
 livesplit-core = { git = "https://github.com/LiveSplit/livesplit-core", features = ["software-rendering", "font-loading", "auto-splitting"] }
 log = { version = "0.4.6", features = ["serde"] }
-minifb = "0.20.0"
+mimalloc = { version = "0.1.27", default-features = false }
+minifb = "0.23.0"
 serde = { version = "1.0.85", features = ["derive"] }
-serde_yaml = "0.8.8"
+serde_yaml = "0.9.2"
 tokio = { version = "1.6.1", features = ["rt-multi-thread"] }
 twitch-stream-markers = { path = "twitch-stream-markers" }
-mimalloc = { version = "0.1.27", default-features = false }
 
 # Slightly optimize the transpose function to inline everything.
 [profile.dev.package."livesplit-one"]
