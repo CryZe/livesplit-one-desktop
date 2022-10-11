@@ -21,18 +21,20 @@ tokio = { version = "1.6.1", features = ["rt-multi-thread"] }
 twitch-stream-markers = { path = "twitch-stream-markers" }
 mimalloc = { version = "0.1.27", default-features = false }
 
-[profile.dev.package."*"]
+# Slightly optimize the transpose function to inline everything.
+[profile.dev.package."livesplit-one"]
+opt-level = 1
+
+# The majority of the rendering is in tiny-skia, which should be optimized as
+# much as possible.
+[profile.dev.package."tiny-skia"]
 opt-level = 3
 debug-assertions = false
 overflow-checks = false
 
-[profile.dev.build-override]
-opt-level = 0
-
 [profile.release]
 lto = true
 panic = "abort"
-# debug = true
 
 [profile.release.build-override]
 opt-level = 0
