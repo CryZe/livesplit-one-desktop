@@ -5,7 +5,9 @@ mod stream_markers;
 
 use crate::config::Config;
 use bytemuck::{Pod, Zeroable};
-use livesplit_core::{auto_splitting, layout::LayoutState, rendering::software::Renderer, Timer};
+use livesplit_core::{
+    auto_splitting, layout::Component, layout::LayoutState, rendering::software::Renderer, Timer,
+};
 use mimalloc::MiMalloc;
 use minifb::{Key, KeyRepeat};
 
@@ -17,6 +19,7 @@ fn main() {
     config.setup_logging();
 
     let run = config.parse_run_or_default();
+
     let timer = Timer::new(run).unwrap().into_shared();
     config.configure_timer(&mut timer.write().unwrap());
 
@@ -28,6 +31,25 @@ fn main() {
     let _hotkey_system = config.create_hotkey_system(timer.clone());
 
     let mut layout = config.parse_layout_or_default();
+    for comp in &mut layout.components {
+        match comp {
+            Component::Splits(s) => {
+                let settings = s.settings_mut();
+                //settings.fill_with_blank_space = false;
+                dbg!(&settings.fill_with_blank_space);
+            }
+            _ => {}
+        }
+    }
+    /*
+    if false {
+        layout.push(livesplit_core::component::graph::Component::new());
+        let mut layout_file = std::fs::File::create("layout.json").unwrap();
+        let settings = layout.settings();
+        settings.write_json(layout_file);
+    }
+     */
+    //let settings = layout.general_settings();
 
     let mut window = config.build_window().unwrap();
 
@@ -48,6 +70,14 @@ fn main() {
             && (window.is_key_down(Key::LeftCtrl) || window.is_key_down(Key::RightCtrl))
         {
             config.save_splits(&timer.read().unwrap());
+        }
+        if window.is_key_pressed(Key::Space, KeyRepeat::No) {
+            let mut t = timer.write().unwrap();
+            (*t).split_or_start();
+        }
+        if window.is_key_pressed(Key::P, KeyRepeat::No) {
+            let mut t = timer.write().unwrap();
+            (*t).toggle_pause();
         }
 
         let (width, height) = window.get_size();
