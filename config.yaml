@@ -38,8 +38,8 @@ window:
 
 # hotkeys:
 #   # split: null
-#   undo_all_pauses: NumPad7
-#   toggle_timing_method: NumPad9
+#   undo_all_pauses: Numpad7
+#   toggle_timing_method: Numpad9
 
 # connections:
   # twitch: puttheaccesstokenhere
