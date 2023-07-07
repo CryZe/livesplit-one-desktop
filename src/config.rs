@@ -85,7 +85,7 @@ impl Config {
     pub fn parse_run(&self) -> Option<Run> {
         let path = self.general.splits.clone()?;
         let file = fs::read(&path).ok()?;
-        let mut run = composite::parse(&file, Some(path), true).ok()?.run;
+        let mut run = composite::parse(&file, Some(&path)).ok()?.run;
         run.fix_splits();
         Some(run)
     }
