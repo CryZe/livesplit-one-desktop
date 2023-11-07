@@ -9,7 +9,7 @@ default = []
 
 [dependencies]
 backtrace = "0.3.13"
-bytemuck = "1.4.1"
+bytemuck = { version = "1.4.1", features = ["derive"] }
 fern = "0.6.0"
 humantime = "2.1.0"
 livesplit-core = { git = "https://github.com/LiveSplit/livesplit-core", features = ["software-rendering", "font-loading", "auto-splitting"] }
