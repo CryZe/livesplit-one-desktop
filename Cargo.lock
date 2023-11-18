@@ -1197,7 +1197,7 @@ checksum = "da2479e8c062e40bf0066ffa0bc823de0a9368974af99c9f6df941d2c231e03f"
 [[package]]
 name = "livesplit-auto-splitting"
 version = "0.1.0"
-source = "git+https://github.com/LiveSplit/livesplit-core#ee712452b79ed2e71194322647796abbb7c5f881"
+source = "git+https://github.com/LiveSplit/livesplit-core#7066331252814ee3bd6f508713223f8ba84132bf"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1218,7 +1218,7 @@ dependencies = [
 [[package]]
 name = "livesplit-core"
 version = "0.13.0"
-source = "git+https://github.com/LiveSplit/livesplit-core#ee712452b79ed2e71194322647796abbb7c5f881"
+source = "git+https://github.com/LiveSplit/livesplit-core#7066331252814ee3bd6f508713223f8ba84132bf"
 dependencies = [
  "base64-simd",
  "bytemuck",
@@ -1252,7 +1252,7 @@ dependencies = [
 [[package]]
 name = "livesplit-hotkey"
 version = "0.7.0"
-source = "git+https://github.com/LiveSplit/livesplit-core#ee712452b79ed2e71194322647796abbb7c5f881"
+source = "git+https://github.com/LiveSplit/livesplit-core#7066331252814ee3bd6f508713223f8ba84132bf"
 dependencies = [
  "bitflags 2.4.1",
  "cfg-if",
@@ -1287,7 +1287,7 @@ dependencies = [
 [[package]]
 name = "livesplit-title-abbreviations"
 version = "0.3.0"
-source = "git+https://github.com/LiveSplit/livesplit-core#ee712452b79ed2e71194322647796abbb7c5f881"
+source = "git+https://github.com/LiveSplit/livesplit-core#7066331252814ee3bd6f508713223f8ba84132bf"
 dependencies = [
  "unicase",
 ]
