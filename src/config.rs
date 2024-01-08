@@ -200,9 +200,9 @@ impl Config {
         stream_markers::Client::new(self.connections.twitch.as_deref())
     }
 
-    pub fn maybe_load_auto_splitter(&self, runtime: &auto_splitting::Runtime) {
+    pub fn maybe_load_auto_splitter(&self, runtime: &auto_splitting::Runtime, timer: SharedTimer) {
         if let Some(auto_splitter) = &self.general.auto_splitter {
-            if let Err(e) = runtime.load_script_blocking(auto_splitter.clone()) {
+            if let Err(e) = runtime.load(auto_splitter.clone(), timer) {
                 log::error!("Auto Splitter failed to load: {}", ErrorChain(&e));
             }
         }

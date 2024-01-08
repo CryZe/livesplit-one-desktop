@@ -22,8 +22,8 @@ fn main() {
 
     let mut markers = config.build_marker_client();
 
-    let auto_splitter = auto_splitting::Runtime::new(timer.clone());
-    config.maybe_load_auto_splitter(&auto_splitter);
+    let auto_splitter = auto_splitting::Runtime::new();
+    config.maybe_load_auto_splitter(&auto_splitter, timer.clone());
 
     let _hotkey_system = config.create_hotkey_system(timer.clone());
 
