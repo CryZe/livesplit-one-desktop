@@ -5,7 +5,9 @@ mod stream_markers;
 
 use crate::config::Config;
 use bytemuck::{Pod, Zeroable};
-use livesplit_core::{auto_splitting, layout::LayoutState, rendering::software::Renderer, Timer};
+use livesplit_core::{
+    auto_splitting, layout::LayoutState, rendering::software::Renderer, settings::ImageCache, Timer,
+};
 use mimalloc::MiMalloc;
 use minifb::{Key, KeyRepeat};
 
@@ -22,8 +24,8 @@ fn main() {
 
     let mut markers = config.build_marker_client();
 
-    let auto_splitter = auto_splitting::Runtime::new(timer.clone());
-    config.maybe_load_auto_splitter(&auto_splitter);
+    let auto_splitter = auto_splitting::Runtime::new();
+    config.maybe_load_auto_splitter(&auto_splitter, timer.clone());
 
     let _hotkey_system = config.create_hotkey_system(timer.clone());
 
@@ -33,6 +35,7 @@ fn main() {
 
     let mut renderer = Renderer::new();
     let mut layout_state = LayoutState::default();
+    let mut image_cache = ImageCache::new();
     let mut buf = Vec::new();
 
     while window.is_open() {
@@ -55,9 +58,9 @@ fn main() {
             {
                 let timer = timer.read().unwrap();
                 markers.tick(&timer);
-                layout.update_state(&mut layout_state, &timer.snapshot());
+                layout.update_state(&mut layout_state, &mut image_cache, &timer.snapshot());
             }
-            renderer.render(&layout_state, [width as _, height as _]);
+            renderer.render(&layout_state, &image_cache, [width as _, height as _]);
 
             buf.resize(width * height, 0);
 
@@ -67,6 +70,8 @@ fn main() {
             );
         }
         window.update_with_buffer(&buf, width, height).unwrap();
+
+        image_cache.collect();
     }
 }
 
